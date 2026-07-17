@@ -102,17 +102,36 @@ function upload(lat, lng) {
     formData.append('lng', lng);
     formData.append('selfie', cameraInput.files[0]);
 
-    fetch('save_log.php', { method: 'POST', body: formData })
-        .then(r => r.json())
-        .then(data => {
+    console.log('📤 ارسال به سرور:', {type: pendingType, lat, lng}); // لاگ
+    
+    fetch('save_log.php', { 
+        method: 'POST', 
+        body: formData 
+    })
+    .then(response => {
+        console.log('📥 پاسخ دریافت شد:', response.status, response.statusText); // لاگ
+        return response.text(); // به جای json، متن بگیر
+    })
+    .then(text => {
+        console.log('📄 محتوای پاسخ:', text); // لاگ مهم
+        try {
+            const data = JSON.parse(text);
             if (data.ok) {
                 msg.textContent = 'با موفقیت ثبت شد.';
                 setTimeout(() => location.reload(), 800);
             } else {
                 msg.textContent = data.error || 'خطا در ثبت.';
             }
-        })
-        .catch(() => { msg.textContent = 'خطا در ارتباط با سرور.'; });
+        } catch (e) {
+            console.error('❌ خطا در parse JSON:', e);
+            console.log('متن پاسخ:', text);
+            msg.textContent = 'خطا در پاسخ سرور';
+        }
+    })
+    .catch(err => {
+        console.error('❌ خطای شبکه:', err);
+        msg.textContent = 'خطا در ارتباط با سرور.';
+    });
 }
 </script>
 </body>
