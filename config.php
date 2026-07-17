@@ -1,219 +1,224 @@
 <?php
 // ============================================
-// مخفی کردن خطاهای نمایشی
+// تنظیمات اولیه
 // ============================================
 error_reporting(0);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/php_errors.log');
+
+// اطلاعات اتصال به دیتابیس
+define('DB_HOST', 'remote-fanhab.runflare.com:32154');
+define('DB_NAME', 'dbtestzkt_db');
+define('DB_USER', 'root');
+define('DB_PASS', 'lBRI613ruFnVjbhIMnog');
+define('TEACHER_PASSWORD', 'S@eed1375');
 
 // ============================================
-// بارگذاری تنظیمات
+// شروع سشن
 // ============================================
-require 'config.php';
-header('Content-Type: application/json');
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 // ============================================
-// تابع لاگ ساده
+// تابع اتصال به دیتابیس
 // ============================================
-function debugLog($msg, $data = null) {
-    $log = date('Y-m-d H:i:s') . " - " . $msg;
-    if ($data !== null) {
-        $log .= " - " . print_r($data, true);
+function getDB() {
+    static $pdo = null;
+    if ($pdo === null) {
+        $pdo = new PDO(
+            'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',
+            DB_USER,
+            DB_PASS,
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+        );
     }
-    @file_put_contents(__DIR__ . '/debug.log', $log . PHP_EOL, FILE_APPEND);
-}
-
-debugLog("=== شروع درخواست ===");
-debugLog("POST", $_POST);
-debugLog("FILES", $_FILES);
-
-// ============================================
-// بررسی ورود کاربر
-// ============================================
-if (empty($_SESSION['student_id'])) {
-    echo json_encode(['ok' => false, 'error' => 'ابتدا وارد شوید.']);
-    exit;
-}
-
-$studentId = $_SESSION['student_id'];
-$type = $_POST['type'] ?? '';
-$lat = floatval($_POST['lat'] ?? 0);
-$lng = floatval($_POST['lng'] ?? 0);
-$today = date('Y-m-d');
-
-debugLog("studentId: $studentId, type: $type, lat: $lat, lng: $lng");
-
-// ============================================
-// اعتبارسنجی مختصات
-// ============================================
-if ($lat == 0 || $lng == 0) {
-    echo json_encode(['ok' => false, 'error' => 'مختصات مکانی دریافت نشد (0,0).']);
-    exit;
-}
-
-if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
-    echo json_encode(['ok' => false, 'error' => 'مختصات مکانی نامعتبر است.']);
-    exit;
+    return $pdo;
 }
 
 // ============================================
-// اعتبارسنجی نوع
+// تابع محاسبه فاصله
 // ============================================
-if (!in_array($type, ['in', 'out'])) {
-    echo json_encode(['ok' => false, 'error' => 'نوع ثبت نامعتبر است.']);
-    exit;
+function haversineMeters($lat1, $lon1, $lat2, $lon2) {
+    $R = 6371000;
+    $dLat = deg2rad($lat2 - $lat1);
+    $dLon = deg2rad($lon2 - $lon1);
+    $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) ** 2;
+    return (int) round($R * 2 * atan2(sqrt($a), sqrt(1 - $a)));
 }
 
 // ============================================
-// بررسی عکس
+// تابع فشرده‌سازی عکس (نسخه مقاوم)
 // ============================================
-if (!isset($_FILES['selfie']) || $_FILES['selfie']['error'] !== UPLOAD_ERR_OK) {
-    $errorMsg = 'عکس دریافت نشد.';
-    if (isset($_FILES['selfie']['error'])) {
-        $errorMsg .= ' کد خطا: ' . $_FILES['selfie']['error'];
-    }
-    echo json_encode(['ok' => false, 'error' => $errorMsg]);
-    exit;
-}
-
-// ============================================
-// اتصال به دیتابیس
-// ============================================
-try {
-    $db = getDB();
-    debugLog("اتصال به دیتابیس موفق");
-} catch (PDOException $e) {
-    debugLog("خطا در اتصال به دیتابیس: " . $e->getMessage());
-    echo json_encode(['ok' => false, 'error' => 'خطا در اتصال به دیتابیس.']);
-    exit;
-}
-
-// ============================================
-// بررسی تکراری
-// ============================================
-try {
-    $stmt = $db->prepare('SELECT id FROM attendance_logs WHERE student_id = ? AND type = ? AND log_date = ?');
-    $stmt->execute([$studentId, $type, $today]);
-    if ($stmt->fetch()) {
-        echo json_encode(['ok' => false, 'error' => 'قبلا برای امروز ثبت شده است.']);
-        exit;
-    }
-
-    if ($type === 'out') {
-        $stmt = $db->prepare('SELECT id FROM attendance_logs WHERE student_id = ? AND type = ? AND log_date = ?');
-        $stmt->execute([$studentId, 'in', $today]);
-        if (!$stmt->fetch()) {
-            echo json_encode(['ok' => false, 'error' => 'ابتدا باید ورود ثبت شود.']);
-            exit;
+function compressImageUnder250KB($sourcePath, $destPath, $maxBytes = 250000) {
+    // ============================================
+    // مرحله 1: ایجاد پوشه
+    // ============================================
+    $destDir = dirname($destPath);
+    if (!is_dir($destDir)) {
+        if (!mkdir($destDir, 0777, true)) {
+            error_log("Failed to create directory: $destDir");
+            return false;
         }
     }
-} catch (PDOException $e) {
-    debugLog("خطا در بررسی دیتابیس: " . $e->getMessage());
-    echo json_encode(['ok' => false, 'error' => 'خطا در بررسی دیتابیس.']);
-    exit;
-}
-
-// ============================================
-// ذخیره عکس با فشرده‌سازی
-// ============================================
-$relativePath = '';
-$destPath = '';
-
-try {
-    // ایجاد نام فایل
-    $ext = strtolower(pathinfo($_FILES['selfie']['name'], PATHINFO_EXTENSION));
-    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'])) {
-        $ext = 'jpg';
+    chmod($destDir, 0777);
+    
+    // ============================================
+    // مرحله 2: بررسی فایل منبع
+    // ============================================
+    if (!file_exists($sourcePath)) {
+        error_log("Source file not found: $sourcePath");
+        return false;
     }
     
-    $fileName = 'student' . $studentId . '_' . $type . '_' . date('Ymd_His') . '.' . $ext;
-    $destPath = '/var/www/html/uploads/selfies/' . $fileName;
-    
-    debugLog("ذخیره عکس در: " . $destPath);
-    debugLog("حجم فایل: " . $_FILES['selfie']['size'] . " bytes");
+    $fileSize = filesize($sourcePath);
+    error_log("Source file size: $fileSize bytes");
     
     // ============================================
-    // استفاده از تابع فشرده‌سازی
+    // مرحله 3: اگر حجم کم است، فقط کپی کن
     // ============================================
-    $result = compressImageUnder250KB($_FILES['selfie']['tmp_name'], $destPath, 250000);
-    
-    if ($result && file_exists($destPath)) {
-        $relativePath = 'uploads/selfies/' . $fileName;
-        debugLog("عکس با موفقیت ذخیره شد: " . $relativePath);
-        debugLog("حجم نهایی: " . filesize($destPath) . " bytes");
-    } else {
-        // اگر فشرده‌سازی نشد، از روش ساده استفاده کن
-        debugLog("فشرده‌سازی ناموفق - استفاده از روش ساده");
-        if (saveSelfie($_FILES['selfie']['tmp_name'], $destPath)) {
-            $relativePath = 'uploads/selfies/' . $fileName;
-            debugLog("عکس با روش ساده ذخیره شد: " . $relativePath);
-        } else {
-            throw new Exception('فایل ذخیره نشد.');
+    if ($fileSize <= $maxBytes) {
+        if (copy($sourcePath, $destPath)) {
+            chmod($destPath, 0666);
+            error_log("File copied (small): $destPath");
+            return true;
         }
+        error_log("Copy failed for small file");
+        return false;
     }
     
-} catch (Exception $e) {
-    debugLog("خطا در ذخیره عکس: " . $e->getMessage());
-    echo json_encode(['ok' => false, 'error' => 'خطا در ذخیره عکس: ' . $e->getMessage()]);
-    exit;
-}
-
-// ============================================
-// محاسبه فاصله
-// ============================================
-$distance = null;
-if ($type === 'out') {
+    // ============================================
+    // مرحله 4: بررسی وجود GD
+    // ============================================
+    if (!extension_loaded('gd')) {
+        error_log("GD extension not loaded - copying original");
+        copy($sourcePath, $destPath);
+        chmod($destPath, 0666);
+        return true;
+    }
+    
+    // ============================================
+    // مرحله 5: فشرده‌سازی با GD
+    // ============================================
     try {
-        $stmt = $db->prepare('SELECT latitude, longitude FROM attendance_logs WHERE student_id = ? AND type = ? AND log_date = ?');
-        $stmt->execute([$studentId, 'in', $today]);
-        $inRow = $stmt->fetch();
-        if ($inRow) {
-            $distance = haversineMeters($inRow['latitude'], $inRow['longitude'], $lat, $lng);
-            debugLog("فاصله محاسبه شد: " . $distance);
+        // تشخیص نوع تصویر
+        $info = @getimagesize($sourcePath);
+        if ($info === false) {
+            error_log("Cannot get image info - copying original");
+            copy($sourcePath, $destPath);
+            chmod($destPath, 0666);
+            return true;
         }
+        
+        $mime = $info['mime'];
+        $image = null;
+        
+        // ایجاد تصویر بر اساس نوع
+        switch ($mime) {
+            case 'image/jpeg':
+                $image = @imagecreatefromjpeg($sourcePath);
+                break;
+            case 'image/png':
+                $image = @imagecreatefrompng($sourcePath);
+                break;
+            case 'image/webp':
+                if (function_exists('imagecreatefromwebp')) {
+                    $image = @imagecreatefromwebp($sourcePath);
+                }
+                break;
+            default:
+                error_log("Unsupported mime type: $mime - copying original");
+                copy($sourcePath, $destPath);
+                chmod($destPath, 0666);
+                return true;
+        }
+        
+        if (!$image) {
+            error_log("Failed to create image from source - copying original");
+            copy($sourcePath, $destPath);
+            chmod($destPath, 0666);
+            return true;
+        }
+        
+        // ============================================
+        // مرحله 6: کوچک‌سازی تصویر
+        // ============================================
+        $width = imagesx($image);
+        $height = imagesy($image);
+        $maxDimension = 1280;
+        
+        if ($width > $maxDimension || $height > $maxDimension) {
+            $ratio = min($maxDimension / $width, $maxDimension / $height);
+            $newWidth = (int) ($width * $ratio);
+            $newHeight = (int) ($height * $ratio);
+            $resized = imagecreatetruecolor($newWidth, $newHeight);
+            if ($resized) {
+                imagecopyresampled($resized, $image, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+                imagedestroy($image);
+                $image = $resized;
+                error_log("Image resized to: {$newWidth}x{$newHeight}");
+            }
+        }
+        
+        // ============================================
+        // مرحله 7: ذخیره با کیفیت‌های مختلف
+        // ============================================
+        $quality = 85;
+        $saved = false;
+        
+        do {
+            if (imagejpeg($image, $destPath, $quality)) {
+                if (file_exists($destPath)) {
+                    $newSize = filesize($destPath);
+                    error_log("Saved with quality $quality: size $newSize bytes");
+                    if ($newSize <= $maxBytes) {
+                        $saved = true;
+                        break;
+                    }
+                }
+            }
+            $quality -= 10;
+        } while ($quality > 20);
+        
+        imagedestroy($image);
+        
+        // ============================================
+        // مرحله 8: اگر فشرده‌سازی نشد، کپی کن
+        // ============================================
+        if (!$saved || !file_exists($destPath)) {
+            error_log("Compression failed - copying original");
+            copy($sourcePath, $destPath);
+        }
+        
+        chmod($destPath, 0666);
+        error_log("Final file size: " . filesize($destPath) . " bytes");
+        return true;
+        
     } catch (Exception $e) {
-        debugLog("خطا در محاسبه فاصله: " . $e->getMessage());
-        $distance = null;
+        error_log("GD Error: " . $e->getMessage() . " - copying original");
+        copy($sourcePath, $destPath);
+        chmod($destPath, 0666);
+        return true;
     }
 }
 
 // ============================================
-// ذخیره در دیتابیس
+// تابع جایگزین ساده (اگر GD کار نکرد)
 // ============================================
-try {
-    $stmt = $db->prepare('
-        INSERT INTO attendance_logs 
-        (student_id, type, log_date, latitude, longitude, selfie_path, distance_from_checkin_meters) 
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ');
-    $stmt->execute([
-        $studentId, 
-        $type, 
-        $today, 
-        $lat, 
-        $lng, 
-        $relativePath, 
-        $distance
-    ]);
-    
-    debugLog("ثبت در دیتابیس موفق");
-    
-    echo json_encode([
-        'ok' => true,
-        'message' => 'ثبت با موفقیت انجام شد',
-        'distance' => $distance
-    ]);
-    
-} catch (PDOException $e) {
-    debugLog("خطا در ذخیره دیتابیس: " . $e->getMessage());
-    
-    // حذف عکس اگر خطا رخ داد
-    if (isset($destPath) && file_exists($destPath)) {
-        @unlink($destPath);
-        debugLog("عکس حذف شد");
+function saveSelfie($sourcePath, $destPath) {
+    $destDir = dirname($destPath);
+    if (!is_dir($destDir)) {
+        if (!mkdir($destDir, 0777, true)) {
+            return false;
+        }
     }
+    chmod($destDir, 0777);
     
-    echo json_encode(['ok' => false, 'error' => 'خطا در ذخیره دیتابیس.']);
-    exit;
+    if (copy($sourcePath, $destPath)) {
+        chmod($destPath, 0666);
+        return true;
+    }
+    return false;
 }
 ?>

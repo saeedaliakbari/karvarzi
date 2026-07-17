@@ -1,19 +1,26 @@
 <?php
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
+// ============================================
+// مخفی کردن خطاهای نمایشی
+// ============================================
+error_reporting(0);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 
+// ============================================
+// بارگذاری تنظیمات
+// ============================================
 require 'config.php';
 header('Content-Type: application/json');
 
 // ============================================
-// شروع دیباگ - لاگ در فایل
+// تابع لاگ ساده
 // ============================================
 function debugLog($msg, $data = null) {
     $log = date('Y-m-d H:i:s') . " - " . $msg;
     if ($data !== null) {
         $log .= " - " . print_r($data, true);
     }
-    file_put_contents(__DIR__ . '/debug.log', $log . PHP_EOL, FILE_APPEND);
+    @file_put_contents(__DIR__ . '/debug.log', $log . PHP_EOL, FILE_APPEND);
 }
 
 debugLog("=== شروع درخواست ===");
@@ -21,7 +28,7 @@ debugLog("POST", $_POST);
 debugLog("FILES", $_FILES);
 
 // ============================================
-// بررسی سشن
+// بررسی ورود کاربر
 // ============================================
 if (empty($_SESSION['student_id'])) {
     echo json_encode(['ok' => false, 'error' => 'ابتدا وارد شوید.']);
@@ -107,31 +114,43 @@ try {
 }
 
 // ============================================
-// ذخیره عکس
+// ذخیره عکس با فشرده‌سازی
 // ============================================
+$relativePath = '';
+$destPath = '';
+
 try {
-    $uploadDir = __DIR__ . '/uploads/selfies/';
-    if (!is_dir($uploadDir)) {
-        mkdir($uploadDir, 0777, true);
-        debugLog("پوشه uploads ایجاد شد");
+    // ایجاد نام فایل
+    $ext = strtolower(pathinfo($_FILES['selfie']['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'])) {
+        $ext = 'jpg';
     }
     
-    chmod($uploadDir, 0777);
-    
-    $ext = strtolower(pathinfo($_FILES['selfie']['name'], PATHINFO_EXTENSION));
     $fileName = 'student' . $studentId . '_' . $type . '_' . date('Ymd_His') . '.' . $ext;
-    $destPath = $uploadDir . $fileName;
+    $destPath = '/var/www/html/uploads/selfies/' . $fileName;
     
     debugLog("ذخیره عکس در: " . $destPath);
+    debugLog("حجم فایل: " . $_FILES['selfie']['size'] . " bytes");
     
-    compressImageUnder250KB($_FILES['selfie']['tmp_name'], $destPath, 250000);
+    // ============================================
+    // استفاده از تابع فشرده‌سازی
+    // ============================================
+    $result = compressImageUnder250KB($_FILES['selfie']['tmp_name'], $destPath, 250000);
     
-    if (!file_exists($destPath)) {
-        throw new Exception('فایل ذخیره نشد.');
+    if ($result && file_exists($destPath)) {
+        $relativePath = 'uploads/selfies/' . $fileName;
+        debugLog("عکس با موفقیت ذخیره شد: " . $relativePath);
+        debugLog("حجم نهایی: " . filesize($destPath) . " bytes");
+    } else {
+        // اگر فشرده‌سازی نشد، از روش ساده استفاده کن
+        debugLog("فشرده‌سازی ناموفق - استفاده از روش ساده");
+        if (saveSelfie($_FILES['selfie']['tmp_name'], $destPath)) {
+            $relativePath = 'uploads/selfies/' . $fileName;
+            debugLog("عکس با روش ساده ذخیره شد: " . $relativePath);
+        } else {
+            throw new Exception('فایل ذخیره نشد.');
+        }
     }
-    
-    $relativePath = 'uploads/selfies/' . $fileName;
-    debugLog("عکس ذخیره شد: " . $relativePath);
     
 } catch (Exception $e) {
     debugLog("خطا در ذخیره عکس: " . $e->getMessage());
@@ -167,7 +186,15 @@ try {
         (student_id, type, log_date, latitude, longitude, selfie_path, distance_from_checkin_meters) 
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ');
-    $stmt->execute([$studentId, $type, $today, $lat, $lng, $relativePath, $distance]);
+    $stmt->execute([
+        $studentId, 
+        $type, 
+        $today, 
+        $lat, 
+        $lng, 
+        $relativePath, 
+        $distance
+    ]);
     
     debugLog("ثبت در دیتابیس موفق");
     
@@ -179,10 +206,13 @@ try {
     
 } catch (PDOException $e) {
     debugLog("خطا در ذخیره دیتابیس: " . $e->getMessage());
-    if (file_exists($destPath)) {
-        unlink($destPath);
+    
+    // حذف عکس اگر خطا رخ داد
+    if (isset($destPath) && file_exists($destPath)) {
+        @unlink($destPath);
         debugLog("عکس حذف شد");
     }
+    
     echo json_encode(['ok' => false, 'error' => 'خطا در ذخیره دیتابیس.']);
     exit;
 }
