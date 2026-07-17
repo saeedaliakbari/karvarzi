@@ -302,6 +302,7 @@ $recentLogs = $stmt->fetchAll();
             cameraInput.click();
         }
 
+<<<<<<< HEAD
         cameraInput.addEventListener('change', function() {
             if (!cameraInput.files.length) return;
             
@@ -377,6 +378,60 @@ $recentLogs = $stmt->fetchAll();
             });
         }
     </script>
+=======
+cameraInput.addEventListener('change', function() {
+    if (!cameraInput.files.length) return;
+    msg.textContent = 'در حال دریافت موقعیت مکانی...';
+
+    navigator.geolocation.getCurrentPosition(function(pos) {
+        upload(pos.coords.latitude, pos.coords.longitude);
+    }, function() {
+        // اگر موقعیت در دسترس نبود، با مقدار صفر ثبت می‌شود تا فرآیند متوقف نشود
+        upload(0, 0);
+    }, { enableHighAccuracy: true, timeout: 8000 });
+});
+
+function upload(lat, lng) {
+    msg.textContent = 'در حال ثبت...';
+    const formData = new FormData();
+    formData.append('type', pendingType);
+    formData.append('lat', lat);
+    formData.append('lng', lng);
+    formData.append('selfie', cameraInput.files[0]);
+
+    console.log('📤 ارسال به سرور:', {type: pendingType, lat, lng}); // لاگ
+    
+    fetch('save_log.php', { 
+        method: 'POST', 
+        body: formData 
+    })
+    .then(response => {
+        console.log('📥 پاسخ دریافت شد:', response.status, response.statusText); // لاگ
+        return response.text(); // به جای json، متن بگیر
+    })
+    .then(text => {
+        console.log('📄 محتوای پاسخ:', text); // لاگ مهم
+        try {
+            const data = JSON.parse(text);
+            if (data.ok) {
+                msg.textContent = 'با موفقیت ثبت شد.';
+                setTimeout(() => location.reload(), 800);
+            } else {
+                msg.textContent = data.error || 'خطا در ثبت.';
+            }
+        } catch (e) {
+            console.error('❌ خطا در parse JSON:', e);
+            console.log('متن پاسخ:', text);
+            msg.textContent = 'خطا در پاسخ سرور';
+        }
+    })
+    .catch(err => {
+        console.error('❌ خطای شبکه:', err);
+        msg.textContent = 'خطا در ارتباط با سرور.';
+    });
+}
+</script>
+>>>>>>> parent of 5206c4f (fix bug upload picture)
 </body>
 </html>
 <?php

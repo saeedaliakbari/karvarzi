@@ -4,7 +4,10 @@
 // ============================================
 error_reporting(0);
 ini_set('display_errors', 0);
+<<<<<<< HEAD
 ini_set('log_errors', 1);
+=======
+>>>>>>> parent of 5206c4f (fix bug upload picture)
 
 // ============================================
 // بارگذاری تنظیمات
@@ -13,6 +16,7 @@ require 'config.php';
 header('Content-Type: application/json');
 
 // ============================================
+<<<<<<< HEAD
 // تابع لاگ
 // ============================================
 function debugLog($msg, $data = null) {
@@ -28,6 +32,8 @@ debugLog("POST", $_POST);
 debugLog("FILES", $_FILES);
 
 // ============================================
+=======
+>>>>>>> parent of 5206c4f (fix bug upload picture)
 // بررسی ورود کاربر
 // ============================================
 if (empty($_SESSION['student_id'])) {
@@ -37,15 +43,14 @@ if (empty($_SESSION['student_id'])) {
 
 $studentId = $_SESSION['student_id'];
 $type = $_POST['type'] ?? '';
-$lat = floatval($_POST['lat'] ?? 0);
-$lng = floatval($_POST['lng'] ?? 0);
+$lat = $_POST['lat'] ?? null;
+$lng = $_POST['lng'] ?? null;
 $today = date('Y-m-d');
-
-debugLog("studentId: $studentId, type: $type, lat: $lat, lng: $lng");
 
 // ============================================
 // اعتبارسنجی
 // ============================================
+<<<<<<< HEAD
 if ($lat == 0 || $lng == 0) {
     echo json_encode(['ok' => false, 'error' => 'مختصات مکانی دریافت نشد (0,0).']);
     exit;
@@ -56,17 +61,23 @@ if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
     exit;
 }
 
+=======
+>>>>>>> parent of 5206c4f (fix bug upload picture)
 if (!in_array($type, ['in', 'out'])) {
     echo json_encode(['ok' => false, 'error' => 'نوع ثبت نامعتبر است.']);
     exit;
 }
 
+<<<<<<< HEAD
+=======
+if ($lat === null || $lng === null) {
+    echo json_encode(['ok' => false, 'error' => 'مختصات دریافت نشد.']);
+    exit;
+}
+
+>>>>>>> parent of 5206c4f (fix bug upload picture)
 if (!isset($_FILES['selfie']) || $_FILES['selfie']['error'] !== UPLOAD_ERR_OK) {
-    $errorMsg = 'عکس دریافت نشد.';
-    if (isset($_FILES['selfie']['error'])) {
-        $errorMsg .= ' کد خطا: ' . $_FILES['selfie']['error'];
-    }
-    echo json_encode(['ok' => false, 'error' => $errorMsg]);
+    echo json_encode(['ok' => false, 'error' => 'عکس دریافت نشد.']);
     exit;
 }
 
@@ -75,15 +86,13 @@ if (!isset($_FILES['selfie']) || $_FILES['selfie']['error'] !== UPLOAD_ERR_OK) {
 // ============================================
 try {
     $db = getDB();
-    debugLog("اتصال به دیتابیس موفق");
 } catch (PDOException $e) {
-    debugLog("خطا در اتصال به دیتابیس: " . $e->getMessage());
     echo json_encode(['ok' => false, 'error' => 'خطا در اتصال به دیتابیس.']);
     exit;
 }
 
 // ============================================
-// بررسی تکراری
+// بررسی دیتابیس
 // ============================================
 try {
     $stmt = $db->prepare('SELECT id FROM attendance_logs WHERE student_id = ? AND type = ? AND log_date = ?');
@@ -102,12 +111,12 @@ try {
         }
     }
 } catch (PDOException $e) {
-    debugLog("خطا در بررسی دیتابیس: " . $e->getMessage());
     echo json_encode(['ok' => false, 'error' => 'خطا در بررسی دیتابیس.']);
     exit;
 }
 
 // ============================================
+<<<<<<< HEAD
 // ذخیره عکس با فشرده‌سازی
 // ============================================
 $relativePath = '';
@@ -119,9 +128,32 @@ try {
         $ext = 'jpg';
     }
     
+=======
+// ذخیره عکس با مدیریت خطا
+// ============================================
+$relativePath = '';
+try {
+    $uploadDir = __DIR__ . '/uploads/selfies/';
+    
+    // ایجاد پوشه با دسترسی کامل
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0777, true);
+    }
+    
+    // تنظیم دسترسی پوشه
+    chmod($uploadDir, 0777);
+    
+    $ext = strtolower(pathinfo($_FILES['selfie']['name'], PATHINFO_EXTENSION));
+    $allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
+    if (!in_array($ext, $allowedExts)) {
+        $ext = 'jpg';
+    }
+    
+>>>>>>> parent of 5206c4f (fix bug upload picture)
     $fileName = 'student' . $studentId . '_' . $type . '_' . date('Ymd_His') . '.' . $ext;
     $destPath = '/var/www/html/uploads/selfies/' . $fileName;
     
+<<<<<<< HEAD
     debugLog("ذخیره عکس در: " . $destPath);
     debugLog("حجم فایل: " . $_FILES['selfie']['size'] . " bytes");
     
@@ -141,6 +173,19 @@ try {
 } catch (Exception $e) {
     debugLog("❌ خطا در ذخیره عکس: " . $e->getMessage());
     echo json_encode(['ok' => false, 'error' => 'خطا در ذخیره عکس: ' . $e->getMessage()]);
+=======
+    // ذخیره و فشرده‌سازی
+    compressImageUnder250KB($_FILES['selfie']['tmp_name'], $destPath, 250000);
+    
+    if (!file_exists($destPath)) {
+        throw new Exception('فایل ذخیره نشد.');
+    }
+    
+    $relativePath = 'uploads/selfies/' . $fileName;
+    
+} catch (Exception $e) {
+    echo json_encode(['ok' => false, 'error' => 'خطا در ذخیره عکس.']);
+>>>>>>> parent of 5206c4f (fix bug upload picture)
     exit;
 }
 
@@ -155,10 +200,8 @@ if ($type === 'out') {
         $inRow = $stmt->fetch();
         if ($inRow) {
             $distance = haversineMeters($inRow['latitude'], $inRow['longitude'], $lat, $lng);
-            debugLog("فاصله محاسبه شد: " . $distance);
         }
     } catch (Exception $e) {
-        debugLog("خطا در محاسبه فاصله: " . $e->getMessage());
         $distance = null;
     }
 }
@@ -182,21 +225,29 @@ try {
         $distance
     ]);
     
+<<<<<<< HEAD
     debugLog("✅ ثبت در دیتابیس موفق");
     
+=======
+>>>>>>> parent of 5206c4f (fix bug upload picture)
     echo json_encode([
         'ok' => true,
-        'message' => 'ثبت با موفقیت انجام شد',
-        'distance' => $distance
+        'message' => 'ثبت با موفقیت انجام شد'
     ]);
     
 } catch (PDOException $e) {
+<<<<<<< HEAD
     debugLog("❌ خطا در ذخیره دیتابیس: " . $e->getMessage());
     
     // حذف عکس اگر خطا رخ داد
     if (isset($destPath) && file_exists($destPath)) {
         @unlink($destPath);
         debugLog("عکس حذف شد");
+=======
+    // حذف عکس اگر خطا رخ داد
+    if (file_exists($destPath)) {
+        unlink($destPath);
+>>>>>>> parent of 5206c4f (fix bug upload picture)
     }
     
     echo json_encode(['ok' => false, 'error' => 'خطا در ذخیره دیتابیس.']);
