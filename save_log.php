@@ -13,7 +13,7 @@ require 'config.php';
 header('Content-Type: application/json');
 
 // ============================================
-// تابع لاگ ساده
+// تابع لاگ
 // ============================================
 function debugLog($msg, $data = null) {
     $log = date('Y-m-d H:i:s') . " - " . $msg;
@@ -44,7 +44,7 @@ $today = date('Y-m-d');
 debugLog("studentId: $studentId, type: $type, lat: $lat, lng: $lng");
 
 // ============================================
-// اعتبارسنجی مختصات
+// اعتبارسنجی
 // ============================================
 if ($lat == 0 || $lng == 0) {
     echo json_encode(['ok' => false, 'error' => 'مختصات مکانی دریافت نشد (0,0).']);
@@ -56,17 +56,11 @@ if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
     exit;
 }
 
-// ============================================
-// اعتبارسنجی نوع
-// ============================================
 if (!in_array($type, ['in', 'out'])) {
     echo json_encode(['ok' => false, 'error' => 'نوع ثبت نامعتبر است.']);
     exit;
 }
 
-// ============================================
-// بررسی عکس
-// ============================================
 if (!isset($_FILES['selfie']) || $_FILES['selfie']['error'] !== UPLOAD_ERR_OK) {
     $errorMsg = 'عکس دریافت نشد.';
     if (isset($_FILES['selfie']['error'])) {
@@ -117,7 +111,6 @@ try {
 // ذخیره عکس با فشرده‌سازی
 // ============================================
 $relativePath = '';
-$destPath = '';
 
 try {
     // ایجاد نام فایل
@@ -135,25 +128,18 @@ try {
     // ============================================
     // استفاده از تابع فشرده‌سازی
     // ============================================
-    $result = compressImageUnder250KB($_FILES['selfie']['tmp_name'], $destPath, 250000);
-    
-    if ($result && file_exists($destPath)) {
+    if (compressImageUnder250KB($_FILES['selfie']['tmp_name'], $destPath, 250000)) {
         $relativePath = 'uploads/selfies/' . $fileName;
-        debugLog("عکس با موفقیت ذخیره شد: " . $relativePath);
-        debugLog("حجم نهایی: " . filesize($destPath) . " bytes");
-    } else {
-        // اگر فشرده‌سازی نشد، از روش ساده استفاده کن
-        debugLog("فشرده‌سازی ناموفق - استفاده از روش ساده");
-        if (saveSelfie($_FILES['selfie']['tmp_name'], $destPath)) {
-            $relativePath = 'uploads/selfies/' . $fileName;
-            debugLog("عکس با روش ساده ذخیره شد: " . $relativePath);
-        } else {
-            throw new Exception('فایل ذخیره نشد.');
+        debugLog("✅ عکس با موفقیت ذخیره شد: " . $relativePath);
+        if (file_exists($destPath)) {
+            debugLog("حجم نهایی: " . filesize($destPath) . " bytes");
         }
+    } else {
+        throw new Exception('فشرده‌سازی و ذخیره عکس ناموفق بود.');
     }
     
 } catch (Exception $e) {
-    debugLog("خطا در ذخیره عکس: " . $e->getMessage());
+    debugLog("❌ خطا در ذخیره عکس: " . $e->getMessage());
     echo json_encode(['ok' => false, 'error' => 'خطا در ذخیره عکس: ' . $e->getMessage()]);
     exit;
 }
@@ -196,7 +182,7 @@ try {
         $distance
     ]);
     
-    debugLog("ثبت در دیتابیس موفق");
+    debugLog("✅ ثبت در دیتابیس موفق");
     
     echo json_encode([
         'ok' => true,
@@ -205,7 +191,7 @@ try {
     ]);
     
 } catch (PDOException $e) {
-    debugLog("خطا در ذخیره دیتابیس: " . $e->getMessage());
+    debugLog("❌ خطا در ذخیره دیتابیس: " . $e->getMessage());
     
     // حذف عکس اگر خطا رخ داد
     if (isset($destPath) && file_exists($destPath)) {

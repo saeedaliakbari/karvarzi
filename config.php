@@ -49,7 +49,7 @@ function haversineMeters($lat1, $lon1, $lat2, $lon2) {
 }
 
 // ============================================
-// تابع فشرده‌سازی عکس (نسخه مقاوم)
+// تابع فشرده‌سازی عکس (نسخه نهایی و ساده)
 // ============================================
 function compressImageUnder250KB($sourcePath, $destPath, $maxBytes = 250000) {
     // ============================================
@@ -76,15 +76,22 @@ function compressImageUnder250KB($sourcePath, $destPath, $maxBytes = 250000) {
     error_log("Source file size: $fileSize bytes");
     
     // ============================================
-    // مرحله 3: اگر حجم کم است، فقط کپی کن
+    // مرحله 3: اگر حجم کم است، با move_uploaded_file منتقل کن
     // ============================================
     if ($fileSize <= $maxBytes) {
+        // توجه: sourcePath یک فایل موقت است که باید با move_uploaded_file منتقل شود
+        if (move_uploaded_file($sourcePath, $destPath)) {
+            chmod($destPath, 0666);
+            error_log("File moved (small): $destPath");
+            return true;
+        }
+        // اگر move_uploaded_file نشد، از copy استفاده کن
         if (copy($sourcePath, $destPath)) {
             chmod($destPath, 0666);
             error_log("File copied (small): $destPath");
             return true;
         }
-        error_log("Copy failed for small file");
+        error_log("Failed to save small file");
         return false;
     }
     
@@ -92,10 +99,12 @@ function compressImageUnder250KB($sourcePath, $destPath, $maxBytes = 250000) {
     // مرحله 4: بررسی وجود GD
     // ============================================
     if (!extension_loaded('gd')) {
-        error_log("GD extension not loaded - copying original");
-        copy($sourcePath, $destPath);
-        chmod($destPath, 0666);
-        return true;
+        error_log("GD not loaded - moving original");
+        if (move_uploaded_file($sourcePath, $destPath)) {
+            chmod($destPath, 0666);
+            return true;
+        }
+        return false;
     }
     
     // ============================================
@@ -105,10 +114,12 @@ function compressImageUnder250KB($sourcePath, $destPath, $maxBytes = 250000) {
         // تشخیص نوع تصویر
         $info = @getimagesize($sourcePath);
         if ($info === false) {
-            error_log("Cannot get image info - copying original");
-            copy($sourcePath, $destPath);
-            chmod($destPath, 0666);
-            return true;
+            error_log("Cannot get image info - moving original");
+            if (move_uploaded_file($sourcePath, $destPath)) {
+                chmod($destPath, 0666);
+                return true;
+            }
+            return false;
         }
         
         $mime = $info['mime'];
@@ -128,17 +139,21 @@ function compressImageUnder250KB($sourcePath, $destPath, $maxBytes = 250000) {
                 }
                 break;
             default:
-                error_log("Unsupported mime type: $mime - copying original");
-                copy($sourcePath, $destPath);
-                chmod($destPath, 0666);
-                return true;
+                error_log("Unsupported mime: $mime - moving original");
+                if (move_uploaded_file($sourcePath, $destPath)) {
+                    chmod($destPath, 0666);
+                    return true;
+                }
+                return false;
         }
         
         if (!$image) {
-            error_log("Failed to create image from source - copying original");
-            copy($sourcePath, $destPath);
-            chmod($destPath, 0666);
-            return true;
+            error_log("Failed to create image - moving original");
+            if (move_uploaded_file($sourcePath, $destPath)) {
+                chmod($destPath, 0666);
+                return true;
+            }
+            return false;
         }
         
         // ============================================
@@ -168,11 +183,18 @@ function compressImageUnder250KB($sourcePath, $destPath, $maxBytes = 250000) {
         $saved = false;
         
         do {
-            if (imagejpeg($image, $destPath, $quality)) {
-                if (file_exists($destPath)) {
-                    $newSize = filesize($destPath);
-                    error_log("Saved with quality $quality: size $newSize bytes");
-                    if ($newSize <= $maxBytes) {
+            // ذخیره موقت در حافظه
+            ob_start();
+            imagejpeg($image, null, $quality);
+            $imageData = ob_get_clean();
+            
+            if ($imageData !== false) {
+                $size = strlen($imageData);
+                error_log("Quality $quality: size $size bytes");
+                
+                if ($size <= $maxBytes) {
+                    // ذخیره در فایل
+                    if (file_put_contents($destPath, $imageData) !== false) {
                         $saved = true;
                         break;
                     }
@@ -184,11 +206,20 @@ function compressImageUnder250KB($sourcePath, $destPath, $maxBytes = 250000) {
         imagedestroy($image);
         
         // ============================================
-        // مرحله 8: اگر فشرده‌سازی نشد، کپی کن
+        // مرحله 8: اگر فشرده‌سازی نشد، فایل اصلی را منتقل کن
         // ============================================
-        if (!$saved || !file_exists($destPath)) {
-            error_log("Compression failed - copying original");
-            copy($sourcePath, $destPath);
+        if (!$saved || !file_exists($destPath) || filesize($destPath) == 0) {
+            error_log("Compression failed or file empty - moving original");
+            if (file_exists($destPath)) {
+                @unlink($destPath);
+            }
+            if (move_uploaded_file($sourcePath, $destPath)) {
+                chmod($destPath, 0666);
+                error_log("Original file moved successfully");
+                return true;
+            }
+            error_log("Failed to move original file");
+            return false;
         }
         
         chmod($destPath, 0666);
@@ -196,29 +227,13 @@ function compressImageUnder250KB($sourcePath, $destPath, $maxBytes = 250000) {
         return true;
         
     } catch (Exception $e) {
-        error_log("GD Error: " . $e->getMessage() . " - copying original");
-        copy($sourcePath, $destPath);
-        chmod($destPath, 0666);
-        return true;
-    }
-}
-
-// ============================================
-// تابع جایگزین ساده (اگر GD کار نکرد)
-// ============================================
-function saveSelfie($sourcePath, $destPath) {
-    $destDir = dirname($destPath);
-    if (!is_dir($destDir)) {
-        if (!mkdir($destDir, 0777, true)) {
-            return false;
+        error_log("GD Error: " . $e->getMessage());
+        // در صورت خطا، فایل اصلی را منتقل کن
+        if (move_uploaded_file($sourcePath, $destPath)) {
+            chmod($destPath, 0666);
+            return true;
         }
+        return false;
     }
-    chmod($destDir, 0777);
-    
-    if (copy($sourcePath, $destPath)) {
-        chmod($destPath, 0666);
-        return true;
-    }
-    return false;
 }
 ?>
