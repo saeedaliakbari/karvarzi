@@ -302,38 +302,27 @@ $recentLogs = $stmt->fetchAll();
             cameraInput.click();
         }
 
-<<<<<<< HEAD
         cameraInput.addEventListener('change', function() {
             if (!cameraInput.files.length) return;
-            
+
             if (!navigator.geolocation) {
                 setMessage('مرورگر شما از موقعیت مکانی پشتیبانی نمی‌کند.', 'error');
                 return;
             }
-            
-            setMessage('📍 در حال دریافت موقعیت...', 'info');
-            
+
+            setMessage('در حال دریافت موقعیت مکانی...', 'info');
+
             navigator.geolocation.getCurrentPosition(
                 function(position) {
-                    const lat = position.coords.latitude;
-                    const lng = position.coords.longitude;
-                    
-                    if (lat === 0 || lng === 0) {
-                        setMessage('موقعیت مکانی نامعتبر است. دوباره تلاش کنید.', 'error');
-                        return;
-                    }
-                    
-                    console.log('📍 موقعیت دریافت شد:', {lat, lng});
-                    upload(lat, lng);
+                    upload(position.coords.latitude, position.coords.longitude);
                 },
                 function(error) {
-                    console.error('خطا در دریافت موقعیت:', error);
                     const messages = {
                         1: 'دسترسی به موقعیت مکانی رد شد.',
                         2: 'اطلاعات موقعیت در دسترس نیست.',
                         3: 'زمان دریافت موقعیت به پایان رسید.'
                     };
-                    setMessage(messages[error.code] || 'خطا در دریافت موقعیت: ' + error.message, 'error');
+                    setMessage(messages[error.code] || 'خطا در دریافت موقعیت مکانی.', 'error');
                 },
                 {
                     enableHighAccuracy: true,
@@ -345,93 +334,35 @@ $recentLogs = $stmt->fetchAll();
 
         function upload(lat, lng) {
             if (lat === 0 || lng === 0) {
-                setMessage('❌ مختصات نامعتبر (0,0). لطفاً دوباره تلاش کنید.', 'error');
+                setMessage('مختصات مکانی نامعتبر است.', 'error');
                 return;
             }
-            
-            setMessage('⏳ در حال ثبت...', 'info');
+
+            setMessage('در حال ثبت...', 'info');
             const formData = new FormData();
             formData.append('type', pendingType);
             formData.append('lat', lat);
             formData.append('lng', lng);
             formData.append('selfie', cameraInput.files[0]);
 
-            console.log('📤 ارسال به سرور:', {type: pendingType, lat, lng});
-            
-            fetch('save_log.php', { 
-                method: 'POST', 
-                body: formData 
+            fetch('save_log.php', {
+                method: 'POST',
+                body: formData
             })
             .then(response => response.json())
             .then(data => {
-                console.log('📄 محتوای پاسخ:', data);
                 if (data.ok) {
-                    setMessage('✅ با موفقیت ثبت شد.', 'success');
+                    setMessage('با موفقیت ثبت شد.', 'success');
                     setTimeout(() => location.reload(), 800);
                 } else {
-                    setMessage('❌ ' + (data.error || 'خطا در ثبت.'), 'error');
+                    setMessage(data.error || 'خطا در ثبت.', 'error');
                 }
             })
-            .catch(err => {
-                console.error('❌ خطای شبکه:', err);
-                setMessage('❌ خطا در ارتباط با سرور.', 'error');
+            .catch(() => {
+                setMessage('خطا در ارتباط با سرور.', 'error');
             });
         }
     </script>
-=======
-cameraInput.addEventListener('change', function() {
-    if (!cameraInput.files.length) return;
-    msg.textContent = 'در حال دریافت موقعیت مکانی...';
-
-    navigator.geolocation.getCurrentPosition(function(pos) {
-        upload(pos.coords.latitude, pos.coords.longitude);
-    }, function() {
-        // اگر موقعیت در دسترس نبود، با مقدار صفر ثبت می‌شود تا فرآیند متوقف نشود
-        upload(0, 0);
-    }, { enableHighAccuracy: true, timeout: 8000 });
-});
-
-function upload(lat, lng) {
-    msg.textContent = 'در حال ثبت...';
-    const formData = new FormData();
-    formData.append('type', pendingType);
-    formData.append('lat', lat);
-    formData.append('lng', lng);
-    formData.append('selfie', cameraInput.files[0]);
-
-    console.log('📤 ارسال به سرور:', {type: pendingType, lat, lng}); // لاگ
-    
-    fetch('save_log.php', { 
-        method: 'POST', 
-        body: formData 
-    })
-    .then(response => {
-        console.log('📥 پاسخ دریافت شد:', response.status, response.statusText); // لاگ
-        return response.text(); // به جای json، متن بگیر
-    })
-    .then(text => {
-        console.log('📄 محتوای پاسخ:', text); // لاگ مهم
-        try {
-            const data = JSON.parse(text);
-            if (data.ok) {
-                msg.textContent = 'با موفقیت ثبت شد.';
-                setTimeout(() => location.reload(), 800);
-            } else {
-                msg.textContent = data.error || 'خطا در ثبت.';
-            }
-        } catch (e) {
-            console.error('❌ خطا در parse JSON:', e);
-            console.log('متن پاسخ:', text);
-            msg.textContent = 'خطا در پاسخ سرور';
-        }
-    })
-    .catch(err => {
-        console.error('❌ خطای شبکه:', err);
-        msg.textContent = 'خطا در ارتباط با سرور.';
-    });
-}
-</script>
->>>>>>> parent of 5206c4f (fix bug upload picture)
 </body>
 </html>
 <?php
