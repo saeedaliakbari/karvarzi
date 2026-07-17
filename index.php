@@ -59,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <input type="text" name="name" placeholder="مثلا: سارا احمدی">
         <button type="submit">ورود</button>
     </form>
-    <p style="margin-top:14px;"><a href="teacher_login.php">ورود معلم</a></p>
+    <!-- <p style="margin-top:14px;"><a href="teacher_login.php">ورود معلم</a></p> -->
 </div>
 </body>
 </html>
