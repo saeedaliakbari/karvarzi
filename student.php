@@ -26,6 +26,7 @@ $recentLogs = $stmt->fetchAll();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ثبت حضور</title>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;700;800&display=swap" rel="stylesheet">
     <!-- Bootstrap 5 RTL -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <!-- Font Awesome -->
@@ -146,6 +147,57 @@ $recentLogs = $stmt->fetchAll();
             padding: 8px 16px;
             border-radius: 20px;
         }
+
+        :root {
+            --body-bg: #f0f2f5;
+            --card-bg: #ffffff;
+            --panel-bg: #f8f9fa;
+            --text: #1f2937;
+            --muted: #6c757d;
+            --border: #f0f0f0;
+            --accent: #667eea;
+            --accent-2: #764ba2;
+        }
+        body[data-theme="dark"] {
+            --body-bg: #0f172a;
+            --card-bg: #111827;
+            --panel-bg: #1f2937;
+            --text: #f8fafc;
+            --muted: #cbd5e1;
+            --border: #334155;
+            --accent: #8b5cf6;
+            --accent-2: #38bdf8;
+        }
+        body {
+            font-family: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
+            background: var(--body-bg);
+            color: var(--text);
+        }
+        .card-dashboard {
+            background: var(--card-bg);
+            color: var(--text);
+        }
+        .card-dashboard .card-header {
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+        }
+        .msg-box, .stat-box, .log-item:hover {
+            background: var(--panel-bg);
+            color: var(--text);
+        }
+        .log-item {
+            border-bottom-color: var(--border);
+        }
+        .logout-link, .status-badge, .text-muted {
+            color: var(--muted) !important;
+        }
+        .theme-toggle {
+            border: 1px solid var(--border);
+            background: var(--panel-bg);
+            color: var(--text);
+        }
+        .theme-toggle:hover {
+            background: var(--card-bg);
+        }
     </style>
 </head>
 <body>
@@ -155,10 +207,15 @@ $recentLogs = $stmt->fetchAll();
                 <div class="card card-dashboard">
                     <!-- Header -->
                     <div class="card-header">
-                        <h3>
-                            <i class="fas fa-user-circle"></i>
-                            سلام <?= htmlspecialchars($_SESSION['student_name']) ?>
-                        </h3>
+                        <div class="d-flex justify-content-between align-items-center gap-2">
+                            <h3 class="mb-0">
+                                <i class="fas fa-user-circle"></i>
+                                سلام <?= htmlspecialchars($_SESSION['student_name']) ?>
+                            </h3>
+                            <button type="button" id="themeToggle" class="btn btn-sm theme-toggle">
+                                <i class="fas fa-moon"></i>
+                            </button>
+                        </div>
                     </div>
                     
                     <!-- Body -->
@@ -360,6 +417,22 @@ $recentLogs = $stmt->fetchAll();
             })
             .catch(() => {
                 setMessage('خطا در ارتباط با سرور.', 'error');
+            });
+        }
+    </script>
+    <script>
+        const themeToggle = document.getElementById('themeToggle');
+        const savedTheme = localStorage.getItem('karvarzi-theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+        document.body.setAttribute('data-theme', initialTheme);
+        if (themeToggle) {
+            themeToggle.innerHTML = initialTheme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+            themeToggle.addEventListener('click', () => {
+                const nextTheme = document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                document.body.setAttribute('data-theme', nextTheme);
+                localStorage.setItem('karvarzi-theme', nextTheme);
+                themeToggle.innerHTML = nextTheme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
             });
         }
     </script>

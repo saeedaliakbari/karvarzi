@@ -16,6 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ورود معلم</title>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -72,6 +73,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: #f093fb;
             text-decoration: underline;
         }
+
+        :root {
+            --bg: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --card-bg: rgba(255,255,255,0.95);
+            --surface: #ffffff;
+            --text: #1f2937;
+            --muted: #64748b;
+            --border: #e0e0e0;
+            --accent: #f5576c;
+            --accent-2: #f093fb;
+        }
+        body[data-theme="dark"] {
+            --bg: linear-gradient(135deg, #111827 0%, #1f2937 100%);
+            --card-bg: rgba(15, 23, 42, 0.95);
+            --surface: #111827;
+            --text: #f8fafc;
+            --muted: #cbd5e1;
+            --border: #334155;
+            --accent: #f472b6;
+            --accent-2: #a78bfa;
+        }
+        body {
+            font-family: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+        .card-login {
+            background: var(--card-bg);
+            color: var(--text);
+        }
+        .card-login .card-header {
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+        }
+        .form-control {
+            background: var(--surface);
+            color: var(--text);
+            border-color: var(--border);
+        }
+        .form-control::placeholder {
+            color: var(--muted);
+        }
+        .theme-toggle {
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+        }
+        .theme-toggle:hover {
+            background: var(--surface);
+            opacity: 0.9;
+        }
     </style>
 </head>
 <body>
@@ -84,6 +135,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <h3>ورود معلم</h3>
                     </div>
                     <div class="card-body p-4 p-md-5">
+                        <div class="d-flex justify-content-end mb-3">
+                            <button type="button" id="themeToggle" class="btn btn-sm theme-toggle">
+                                <i class="fas fa-moon me-1"></i>
+                                تم تاریک
+                            </button>
+                        </div>
                         <?php if (!empty($error)): ?>
                             <div class="alert alert-danger alert-dismissible fade show">
                                 <i class="fas fa-exclamation-circle me-2"></i>

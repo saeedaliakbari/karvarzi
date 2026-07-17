@@ -40,6 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ورود دانش‌آموز</title>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;700;800&display=swap" rel="stylesheet">
     <!-- Bootstrap 5 RTL -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <!-- Font Awesome -->
@@ -116,6 +117,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: #764ba2;
             text-decoration: underline;
         }
+
+        :root {
+            --bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --card-bg: rgba(255,255,255,0.95);
+            --surface: #ffffff;
+            --surface-2: #f8fafc;
+            --text: #1f2937;
+            --muted: #64748b;
+            --border: #e0e0e0;
+            --accent: #667eea;
+            --accent-2: #764ba2;
+        }
+        body[data-theme="dark"] {
+            --bg: linear-gradient(135deg, #0f172a 0%, #111827 100%);
+            --card-bg: rgba(15, 23, 42, 0.95);
+            --surface: #111827;
+            --surface-2: #1f2937;
+            --text: #f8fafc;
+            --muted: #cbd5e1;
+            --border: #334155;
+            --accent: #8b5cf6;
+            --accent-2: #38bdf8;
+        }
+        body {
+            font-family: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+        .card-login {
+            background: var(--card-bg);
+            color: var(--text);
+        }
+        .card-login .card-header {
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+        }
+        .card-login .card-body {
+            background: transparent;
+        }
+        .form-control {
+            background: var(--surface);
+            color: var(--text);
+            border-color: var(--border);
+        }
+        .form-control::placeholder {
+            color: var(--muted);
+        }
+        .teacher-link {
+            color: var(--accent);
+        }
+        .theme-toggle {
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+        }
+        .theme-toggle:hover {
+            background: var(--surface-2);
+            color: var(--text);
+        }
     </style>
 </head>
 <body>
@@ -136,6 +195,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </div>
                         <?php endif; ?>
                         
+                        <div class="d-flex justify-content-end mb-3">
+                            <button type="button" id="themeToggle" class="btn btn-sm theme-toggle">
+                                <i class="fas fa-moon me-1"></i>
+                                تم تاریک
+                            </button>
+                        </div>
+
                         <form method="POST">
                             <div class="mb-4 input-icon">
                                 <i class="fas fa-phone"></i>

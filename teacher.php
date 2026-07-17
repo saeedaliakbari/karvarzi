@@ -23,6 +23,7 @@ $logs = $stmt->fetchAll();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>پنل گزارش معلم</title>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -154,6 +155,62 @@ $logs = $stmt->fetchAll();
             color: #6c757d;
             font-size: 0.85rem;
         }
+
+        :root {
+            --body-bg: #f0f2f5;
+            --card-bg: #ffffff;
+            --panel-bg: #f8f9fa;
+            --text: #1f2937;
+            --muted: #6c757d;
+            --border: #f0f0f0;
+            --accent: #f5576c;
+            --accent-2: #f093fb;
+        }
+        body[data-theme="dark"] {
+            --body-bg: #0f172a;
+            --card-bg: #111827;
+            --panel-bg: #1f2937;
+            --text: #f8fafc;
+            --muted: #cbd5e1;
+            --border: #334155;
+            --accent: #f472b6;
+            --accent-2: #a78bfa;
+        }
+        body {
+            font-family: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
+            background: var(--body-bg);
+            color: var(--text);
+        }
+        .card-dashboard {
+            background: var(--card-bg);
+            color: var(--text);
+        }
+        .card-dashboard .card-header {
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+        }
+        .table-custom thead {
+            background: var(--panel-bg);
+            color: var(--text);
+        }
+        .table-custom td, .table-custom th {
+            border-color: var(--border);
+            color: var(--text);
+        }
+        .table-custom tbody tr:hover {
+            background: var(--panel-bg);
+        }
+        .stat-box, .empty-state {
+            background: var(--panel-bg);
+            color: var(--text);
+        }
+        .logout-btn, .theme-toggle {
+            border: 1px solid var(--border);
+            background: var(--panel-bg);
+            color: var(--text);
+        }
+        .theme-toggle:hover {
+            background: var(--card-bg);
+        }
     </style>
 </head>
 <body>
@@ -165,10 +222,15 @@ $logs = $stmt->fetchAll();
                     <i class="fas fa-chart-line"></i>
                     گزارش حضور و غیاب
                 </h2>
-                <a href="logout.php" class="logout-btn">
-                    <i class="fas fa-sign-out-alt me-2"></i>
-                    خروج
-                </a>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" id="themeToggle" class="btn btn-sm theme-toggle">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <a href="logout.php" class="logout-btn">
+                        <i class="fas fa-sign-out-alt me-2"></i>
+                        خروج
+                    </a>
+                </div>
             </div>
             
             <!-- Body -->
@@ -279,5 +341,21 @@ $logs = $stmt->fetchAll();
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const themeToggle = document.getElementById('themeToggle');
+        const savedTheme = localStorage.getItem('karvarzi-theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+        document.body.setAttribute('data-theme', initialTheme);
+        if (themeToggle) {
+            themeToggle.innerHTML = initialTheme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+            themeToggle.addEventListener('click', () => {
+                const nextTheme = document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                document.body.setAttribute('data-theme', nextTheme);
+                localStorage.setItem('karvarzi-theme', nextTheme);
+                themeToggle.innerHTML = nextTheme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+            });
+        }
+    </script>
 </body>
 </html>
