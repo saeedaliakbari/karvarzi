@@ -84,17 +84,59 @@ function triggerCapture(type) {
 
 cameraInput.addEventListener('change', function() {
     if (!cameraInput.files.length) return;
-    msg.textContent = 'در حال دریافت موقعیت مکانی...';
-
-    navigator.geolocation.getCurrentPosition(function(pos) {
-        upload(pos.coords.latitude, pos.coords.longitude);
-    }, function() {
-        // اگر موقعیت در دسترس نبود، با مقدار صفر ثبت می‌شود تا فرآیند متوقف نشود
-        upload(0, 0);
-    }, { enableHighAccuracy: true, timeout: 8000 });
+    if (!navigator.geolocation) {
+        msg.textContent = 'مرورگر شما از موقعیت مکانی پشتیبانی نمی‌کند.';
+        return;
+    }
+    
+    msg.textContent = 'در حال دریافت موقعیت...';
+    
+    navigator.geolocation.getCurrentPosition(
+        // موفقیت
+        function(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            
+            // ✅ بررسی کنید که مختصات صفر نباشند
+            if (lat === 0 || lng === 0) {
+                msg.textContent = 'موقعیت مکانی نامعتبر است. دوباره تلاش کنید.';
+                return;
+            }
+            
+            console.log('📍 موقعیت دریافت شد:', {lat, lng});
+            // ادامه فرآیند آپلود
+            upload(lat, lng);
+        },function(error) {
+            console.error('خطا در دریافت موقعیت:', error);
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    msg.textContent = 'دسترسی به موقعیت مکانی رد شد.';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    msg.textContent = 'اطلاعات موقعیت در دسترس نیست.';
+                    break;
+                case error.TIMEOUT:
+                    msg.textContent = 'زمان دریافت موقعیت به پایان رسید.';
+                    break;
+                default:
+                    msg.textContent = 'خطا در دریافت موقعیت: ' + error.message;
+            }
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        }
+    );
 });
 
 function upload(lat, lng) {
+    // ✅ بررسی مجدد مختصات
+    if (lat === 0 || lng === 0) {
+        msg.textContent = '❌ مختصات نامعتبر (0,0). لطفاً دوباره تلاش کنید.';
+        return;
+    }
+    
     msg.textContent = 'در حال ثبت...';
     const formData = new FormData();
     formData.append('type', pendingType);
@@ -102,35 +144,29 @@ function upload(lat, lng) {
     formData.append('lng', lng);
     formData.append('selfie', cameraInput.files[0]);
 
-    console.log('📤 ارسال به سرور:', {type: pendingType, lat, lng}); // لاگ
+    // لاگ برای دیباگ
+    console.log('📤 ارسال به سرور:', {type: pendingType, lat, lng});
     
     fetch('save_log.php', { 
         method: 'POST', 
         body: formData 
     })
     .then(response => {
-        console.log('📥 پاسخ دریافت شد:', response.status, response.statusText); // لاگ
-        return response.text(); // به جای json، متن بگیر
+        console.log('📥 پاسخ دریافت شد:', response.status);
+        return response.json();
     })
-    .then(text => {
-        console.log('📄 محتوای پاسخ:', text); // لاگ مهم
-        try {
-            const data = JSON.parse(text);
-            if (data.ok) {
-                msg.textContent = 'با موفقیت ثبت شد.';
-                setTimeout(() => location.reload(), 800);
-            } else {
-                msg.textContent = data.error || 'خطا در ثبت.';
-            }
-        } catch (e) {
-            console.error('❌ خطا در parse JSON:', e);
-            console.log('متن پاسخ:', text);
-            msg.textContent = 'خطا در پاسخ سرور';
+    .then(data => {
+        console.log('📄 محتوای پاسخ:', data);
+        if (data.ok) {
+            msg.textContent = '✅ با موفقیت ثبت شد.';
+            setTimeout(() => location.reload(), 800);
+        } else {
+            msg.textContent = '❌ ' + (data.error || 'خطا در ثبت.');
         }
     })
     .catch(err => {
         console.error('❌ خطای شبکه:', err);
-        msg.textContent = 'خطا در ارتباط با سرور.';
+        msg.textContent = '❌ خطا در ارتباط با سرور.';
     });
 }
 </script>

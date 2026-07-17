@@ -1,18 +1,27 @@
 <?php
-// ============================================
-// مخفی کردن خطاهای نمایشی
-// ============================================
-error_reporting(0);
-ini_set('display_errors', 0);
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 
-// ============================================
-// بارگذاری تنظیمات
-// ============================================
 require 'config.php';
 header('Content-Type: application/json');
 
 // ============================================
-// بررسی ورود کاربر
+// شروع دیباگ - لاگ در فایل
+// ============================================
+function debugLog($msg, $data = null) {
+    $log = date('Y-m-d H:i:s') . " - " . $msg;
+    if ($data !== null) {
+        $log .= " - " . print_r($data, true);
+    }
+    file_put_contents(__DIR__ . '/debug.log', $log . PHP_EOL, FILE_APPEND);
+}
+
+debugLog("=== شروع درخواست ===");
+debugLog("POST", $_POST);
+debugLog("FILES", $_FILES);
+
+// ============================================
+// بررسی سشن
 // ============================================
 if (empty($_SESSION['student_id'])) {
     echo json_encode(['ok' => false, 'error' => 'ابتدا وارد شوید.']);
@@ -21,25 +30,42 @@ if (empty($_SESSION['student_id'])) {
 
 $studentId = $_SESSION['student_id'];
 $type = $_POST['type'] ?? '';
-$lat = $_POST['lat'] ?? null;
-$lng = $_POST['lng'] ?? null;
+$lat = floatval($_POST['lat'] ?? 0);
+$lng = floatval($_POST['lng'] ?? 0);
 $today = date('Y-m-d');
 
+debugLog("studentId: $studentId, type: $type, lat: $lat, lng: $lng");
+
 // ============================================
-// اعتبارسنجی
+// اعتبارسنجی مختصات
+// ============================================
+if ($lat == 0 || $lng == 0) {
+    echo json_encode(['ok' => false, 'error' => 'مختصات مکانی دریافت نشد (0,0).']);
+    exit;
+}
+
+if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
+    echo json_encode(['ok' => false, 'error' => 'مختصات مکانی نامعتبر است.']);
+    exit;
+}
+
+// ============================================
+// اعتبارسنجی نوع
 // ============================================
 if (!in_array($type, ['in', 'out'])) {
     echo json_encode(['ok' => false, 'error' => 'نوع ثبت نامعتبر است.']);
     exit;
 }
 
-if ($lat === null || $lng === null) {
-    echo json_encode(['ok' => false, 'error' => 'مختصات دریافت نشد.']);
-    exit;
-}
-
+// ============================================
+// بررسی عکس
+// ============================================
 if (!isset($_FILES['selfie']) || $_FILES['selfie']['error'] !== UPLOAD_ERR_OK) {
-    echo json_encode(['ok' => false, 'error' => 'عکس دریافت نشد.']);
+    $errorMsg = 'عکس دریافت نشد.';
+    if (isset($_FILES['selfie']['error'])) {
+        $errorMsg .= ' کد خطا: ' . $_FILES['selfie']['error'];
+    }
+    echo json_encode(['ok' => false, 'error' => $errorMsg]);
     exit;
 }
 
@@ -48,13 +74,15 @@ if (!isset($_FILES['selfie']) || $_FILES['selfie']['error'] !== UPLOAD_ERR_OK) {
 // ============================================
 try {
     $db = getDB();
+    debugLog("اتصال به دیتابیس موفق");
 } catch (PDOException $e) {
+    debugLog("خطا در اتصال به دیتابیس: " . $e->getMessage());
     echo json_encode(['ok' => false, 'error' => 'خطا در اتصال به دیتابیس.']);
     exit;
 }
 
 // ============================================
-// بررسی دیتابیس
+// بررسی تکراری
 // ============================================
 try {
     $stmt = $db->prepare('SELECT id FROM attendance_logs WHERE student_id = ? AND type = ? AND log_date = ?');
@@ -73,35 +101,29 @@ try {
         }
     }
 } catch (PDOException $e) {
+    debugLog("خطا در بررسی دیتابیس: " . $e->getMessage());
     echo json_encode(['ok' => false, 'error' => 'خطا در بررسی دیتابیس.']);
     exit;
 }
 
 // ============================================
-// ذخیره عکس با مدیریت خطا
+// ذخیره عکس
 // ============================================
-$relativePath = '';
 try {
     $uploadDir = __DIR__ . '/uploads/selfies/';
-    
-    // ایجاد پوشه با دسترسی کامل
     if (!is_dir($uploadDir)) {
         mkdir($uploadDir, 0777, true);
+        debugLog("پوشه uploads ایجاد شد");
     }
     
-    // تنظیم دسترسی پوشه
     chmod($uploadDir, 0777);
     
     $ext = strtolower(pathinfo($_FILES['selfie']['name'], PATHINFO_EXTENSION));
-    $allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
-    if (!in_array($ext, $allowedExts)) {
-        $ext = 'jpg';
-    }
-    
     $fileName = 'student' . $studentId . '_' . $type . '_' . date('Ymd_His') . '.' . $ext;
     $destPath = $uploadDir . $fileName;
     
-    // ذخیره و فشرده‌سازی
+    debugLog("ذخیره عکس در: " . $destPath);
+    
     compressImageUnder250KB($_FILES['selfie']['tmp_name'], $destPath, 250000);
     
     if (!file_exists($destPath)) {
@@ -109,9 +131,11 @@ try {
     }
     
     $relativePath = 'uploads/selfies/' . $fileName;
+    debugLog("عکس ذخیره شد: " . $relativePath);
     
 } catch (Exception $e) {
-    echo json_encode(['ok' => false, 'error' => 'خطا در ذخیره عکس.']);
+    debugLog("خطا در ذخیره عکس: " . $e->getMessage());
+    echo json_encode(['ok' => false, 'error' => 'خطا در ذخیره عکس: ' . $e->getMessage()]);
     exit;
 }
 
@@ -126,8 +150,10 @@ if ($type === 'out') {
         $inRow = $stmt->fetch();
         if ($inRow) {
             $distance = haversineMeters($inRow['latitude'], $inRow['longitude'], $lat, $lng);
+            debugLog("فاصله محاسبه شد: " . $distance);
         }
     } catch (Exception $e) {
+        debugLog("خطا در محاسبه فاصله: " . $e->getMessage());
         $distance = null;
     }
 }
@@ -143,15 +169,19 @@ try {
     ');
     $stmt->execute([$studentId, $type, $today, $lat, $lng, $relativePath, $distance]);
     
+    debugLog("ثبت در دیتابیس موفق");
+    
     echo json_encode([
         'ok' => true,
-        'message' => 'ثبت با موفقیت انجام شد'
+        'message' => 'ثبت با موفقیت انجام شد',
+        'distance' => $distance
     ]);
     
 } catch (PDOException $e) {
-    // حذف عکس اگر خطا رخ داد
+    debugLog("خطا در ذخیره دیتابیس: " . $e->getMessage());
     if (file_exists($destPath)) {
         unlink($destPath);
+        debugLog("عکس حذف شد");
     }
     echo json_encode(['ok' => false, 'error' => 'خطا در ذخیره دیتابیس.']);
     exit;
