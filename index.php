@@ -37,29 +37,137 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<title>ورود دانش‌آموز</title>
-<style>
-    body { font-family: Tahoma, sans-serif; background: #f5f5f5; display: flex; justify-content: center; padding-top: 60px; }
-    .box { background: #fff; padding: 24px; border-radius: 12px; width: 320px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
-    input { width: 100%; padding: 10px; margin-top: 6px; margin-bottom: 14px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; }
-    button { width: 100%; padding: 10px; background: #333; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
-    .error { color: #c0392b; margin-bottom: 10px; font-size: 14px; }
-    label { font-size: 13px; color: #555; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ورود دانش‌آموز</title>
+    <!-- Bootstrap 5 RTL -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+        }
+        .card-login {
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            border: none;
+            backdrop-filter: blur(10px);
+            background: rgba(255,255,255,0.95);
+        }
+        .card-login .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px 20px 0 0 !important;
+            padding: 25px;
+            border: none;
+        }
+        .card-login .card-header h3 {
+            color: white;
+            font-weight: 700;
+            margin: 0;
+        }
+        .card-login .card-header i {
+            font-size: 2rem;
+        }
+        .btn-primary-custom {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 12px;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+        .btn-primary-custom:hover {
+            transform: scale(1.02);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+        .form-control {
+            border-radius: 12px;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            transition: border-color 0.3s;
+        }
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        .input-icon {
+            position: relative;
+        }
+        .input-icon i {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #999;
+        }
+        .input-icon .form-control {
+            padding-right: 45px;
+        }
+        .teacher-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        .teacher-link:hover {
+            color: #764ba2;
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
-<div class="box">
-    <h3>ورود دانش‌آموز</h3>
-    <?php if (!empty($error)): ?><p class="error"><?= htmlspecialchars($error) ?></p><?php endif; ?>
-    <form method="POST">
-        <label>شماره موبایل</label>
-        <input type="tel" name="mobile" required placeholder="09123456789">
-        <label>نام و نام خانوادگی (فقط برای اولین ورود)</label>
-        <input type="text" name="name" placeholder="مثلا: سارا احمدی">
-        <button type="submit">ورود</button>
-    </form>
-    <!-- <p style="margin-top:14px;"><a href="teacher_login.php">ورود معلم</a></p> -->
-</div>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-12 col-sm-10 col-md-8 col-lg-6 col-xl-5">
+                <div class="card card-login">
+                    <div class="card-header text-center">
+                        <i class="fas fa-user-graduate mb-2"></i>
+                        <h3>ورود دانش‌آموز</h3>
+                    </div>
+                    <div class="card-body p-4 p-md-5">
+                        <?php if (!empty($error)): ?>
+                            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                                <i class="fas fa-exclamation-circle me-2"></i>
+                                <?= htmlspecialchars($error) ?>
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <form method="POST">
+                            <div class="mb-4 input-icon">
+                                <i class="fas fa-phone"></i>
+                                <input type="tel" class="form-control" name="mobile" placeholder="شماره موبایل" required>
+                            </div>
+                            
+                            <div class="mb-4 input-icon">
+                                <i class="fas fa-user"></i>
+                                <input type="text" class="form-control" name="name" placeholder="نام و نام خانوادگی (فقط برای اولین ورود)">
+                                <small class="text-muted form-text">اگر قبلاً ثبت‌نام کرده‌اید، این فیلد را خالی بگذارید.</small>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary-custom btn-lg w-100 text-white">
+                                <i class="fas fa-sign-in-alt me-2"></i>
+                                ورود
+                            </button>
+                        </form>
+                        
+                        <hr class="my-4">
+                        
+                        <div class="text-center">
+                            <a href="teacher_login.php" class="teacher-link">
+                                <i class="fas fa-chalkboard-teacher me-1"></i>
+                                ورود معلم
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

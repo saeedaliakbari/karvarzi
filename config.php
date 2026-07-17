@@ -1,4 +1,9 @@
 <?php
+error_reporting(0);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/php_errors.log');
+
 // اطلاعات اتصال به دیتابیس را با اطلاعات هاست خودتان جایگزین کنید
 define('DB_HOST', 'remote-fanhab.runflare.com:32154');
 define('DB_NAME', 'dbtestzkt_db');
