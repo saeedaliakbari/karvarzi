@@ -51,7 +51,7 @@ if ($dateTo !== '') {
 
 $sql = '
     SELECT l.id, s.name, s.mobile, l.type, l.log_date, l.latitude, l.longitude,
-           l.selfie_path, l.distance_from_checkin_meters, l.created_at
+           l.selfie_path, l.distance_from_checkin_meters, l.duration_from_checkin_minutes, l.created_at
     FROM attendance_logs l
     JOIN students s ON s.id = l.student_id
 ';
@@ -399,6 +399,7 @@ $logs = $stmt->fetchAll();
                                     <th>نوع</th>
                                     <th>تاریخ</th>
                                     <th>ساعت</th>
+                                    <th>مدت</th>
                                     <th>موقعیت</th>
                                     <th>فاصله</th>
                                 </tr>
@@ -420,6 +421,20 @@ $logs = $stmt->fetchAll();
                                     </td>
                                     <td><?= htmlspecialchars(jalaliDate($log['log_date'])) ?></td>
                                     <td><?= htmlspecialchars(jalaliDate($log['created_at'], 'Y/m/d H:i:s')) ?></td>
+                                    <td>
+                                        <?php if ($log['duration_from_checkin_minutes'] !== null): ?>
+                                            <?php
+                                                $totalMinutes = (int) $log['duration_from_checkin_minutes'];
+                                                $hours = intdiv($totalMinutes, 60);
+                                                $minutes = $totalMinutes % 60;
+                                            ?>
+                                            <span class="badge bg-light text-dark">
+                                                <?= $hours ?> ساعت و <?= $minutes ?> دقیقه
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="text-muted">-</span>
+                                        <?php endif; ?>
+                                    </td>
                                     <td>
                                         <a class="map-link" target="_blank" href="https://www.google.com/maps?q=<?= $log['latitude'] ?>,<?= $log['longitude'] ?>">
                                             <i class="fas fa-map-marker-alt me-1"></i>

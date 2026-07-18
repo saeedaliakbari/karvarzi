@@ -102,24 +102,31 @@ try {
 }
 
 $distance = null;
+$durationMinutes = null;
 if ($type === 'out') {
     try {
-        $stmt = $db->prepare('SELECT latitude, longitude FROM attendance_logs WHERE student_id = ? AND type = ? AND log_date = ?');
+        $stmt = $db->prepare('SELECT latitude, longitude, created_at FROM attendance_logs WHERE student_id = ? AND type = ? AND log_date = ?');
         $stmt->execute([$studentId, 'in', $today]);
         $inRow = $stmt->fetch();
         if ($inRow) {
             $distance = haversineMeters((float) $inRow['latitude'], (float) $inRow['longitude'], (float) $lat, (float) $lng);
+            $checkinTime = strtotime($inRow['created_at']);
+            $checkoutTime = time();
+            if ($checkinTime !== false && $checkoutTime >= $checkinTime) {
+                $durationMinutes = (int) floor(($checkoutTime - $checkinTime) / 60);
+            }
         }
     } catch (Exception $e) {
         $distance = null;
+        $durationMinutes = null;
     }
 }
 
 try {
     $stmt = $db->prepare('
         INSERT INTO attendance_logs
-        (student_id, type, log_date, latitude, longitude, selfie_path, distance_from_checkin_meters)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        (student_id, type, log_date, latitude, longitude, selfie_path, distance_from_checkin_meters, duration_from_checkin_minutes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ');
     $stmt->execute([
         $studentId,
@@ -128,7 +135,8 @@ try {
         $lat,
         $lng,
         $relativePath,
-        $distance
+        $distance,
+        $durationMinutes
     ]);
 
     echo json_encode([

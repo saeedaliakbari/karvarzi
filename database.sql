@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS attendance_logs (
     longitude DECIMAL(10, 7) NOT NULL,
     selfie_path VARCHAR(255) NOT NULL,
     distance_from_checkin_meters INT NULL,
+    duration_from_checkin_minutes INT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
     UNIQUE KEY one_per_day (student_id, type, log_date)
