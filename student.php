@@ -438,11 +438,3 @@ $recentLogs = $stmt->fetchAll();
     </script>
 </body>
 </html>
-<?php
-// تابع کمکی برای تبدیل تاریخ شمسی (اختیاری)
-function jalaliDate($gregorian) {
-    // این تابع را می‌توانید با کتابخانه‌های تبدیل تاریخ شمسی تکمیل کنید
-    // فعلاً همان تاریخ میلادی را برمی‌گرداند
-    return $gregorian;
-}
-?>
