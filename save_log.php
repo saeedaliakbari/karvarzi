@@ -103,23 +103,61 @@ try {
 
 $distance = null;
 $durationMinutes = null;
+$calcWarning = null;
+$calcDebug = null;
+
 if ($type === 'out') {
     try {
-        $durationMinutes = 0;
-        $stmt = $db->prepare('SELECT latitude, longitude, created_at FROM attendance_logs WHERE student_id = ? AND type = ? AND log_date = ?');
+        // محاسبه مدت با ساعت خود MySQL تا اختلاف timezone بین PHP و سرور DB مشکل‌ساز نشود
+        $stmt = $db->prepare('
+            SELECT
+                latitude,
+                longitude,
+                created_at,
+                TIMESTAMPDIFF(MINUTE, created_at, NOW()) AS duration_minutes,
+                NOW() AS db_now
+            FROM attendance_logs
+            WHERE student_id = ? AND type = ? AND log_date = ?
+        ');
         $stmt->execute([$studentId, 'in', $today]);
-        $inRow = $stmt->fetch();
-        if ($inRow) {
-            $distance = haversineMeters((float) $inRow['latitude'], (float) $inRow['longitude'], (float) $lat, (float) $lng);
-            $checkinTime = strtotime($inRow['created_at']);
-            $checkoutTime = time();
-            if ($checkinTime !== false && $checkoutTime >= $checkinTime) {
-                $durationMinutes = (int) floor(($checkoutTime - $checkinTime) / 60);
+        $inRow = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$inRow) {
+            $calcWarning = 'رکورد ورود امروز برای محاسبه مدت پیدا نشد.';
+            error_log("duration calc: check-in row missing student_id={$studentId} date={$today}");
+        } else {
+            $distance = haversineMeters(
+                (float) $inRow['latitude'],
+                (float) $inRow['longitude'],
+                (float) $lat,
+                (float) $lng
+            );
+
+            $rawDuration = $inRow['duration_minutes'];
+            $calcDebug = [
+                'checkin_at' => $inRow['created_at'],
+                'db_now' => $inRow['db_now'],
+                'raw_duration_minutes' => $rawDuration,
+            ];
+
+            if ($rawDuration === null || $rawDuration === '') {
+                $calcWarning = 'محاسبه مدت از دیتابیس مقدار خالی برگرداند.';
+                error_log('duration calc empty: ' . json_encode($calcDebug, JSON_UNESCAPED_UNICODE));
+            } else {
+                $durationMinutes = (int) $rawDuration;
+                if ($durationMinutes < 0) {
+                    $calcWarning = 'زمان خروج از ورود عقب‌تر است (احتمالاً اختلاف ساعت سرور). checkin='
+                        . $inRow['created_at'] . ' now=' . $inRow['db_now'];
+                    error_log('duration calc negative: ' . json_encode($calcDebug, JSON_UNESCAPED_UNICODE));
+                    $durationMinutes = null;
+                }
             }
         }
     } catch (Exception $e) {
         $distance = null;
         $durationMinutes = null;
+        $calcWarning = 'خطا در محاسبه فاصله/مدت: ' . $e->getMessage();
+        error_log('duration/distance calc exception: ' . $e->getMessage());
     }
 }
 
@@ -140,16 +178,40 @@ try {
         $durationMinutes
     ]);
 
-    echo json_encode([
+    $response = [
         'ok' => true,
-        'message' => 'ثبت با موفقیت انجام شد'
-    ]);
+        'message' => 'ثبت با موفقیت انجام شد',
+        'type' => $type,
+        'duration_minutes' => $durationMinutes,
+        'distance_meters' => $distance,
+    ];
+
+    if ($calcWarning !== null) {
+        $response['warning'] = $calcWarning;
+        $response['debug'] = $calcDebug;
+    }
+
+    echo json_encode($response, JSON_UNESCAPED_UNICODE);
 } catch (PDOException $e) {
     if ($destPath !== '' && file_exists($destPath)) {
         @unlink($destPath);
     }
 
-    echo json_encode(['ok' => false, 'error' => 'خطا در ذخیره دیتابیس.']);
+    $dbError = $e->getMessage();
+    error_log('attendance insert failed: ' . $dbError);
+
+    $userError = 'خطا در ذخیره دیتابیس.';
+    if (stripos($dbError, 'Unknown column') !== false) {
+        $userError = 'ستون duration/distance در جدول attendance_logs وجود ندارد. فایل database.sql را روی دیتابیس اعمال کنید یا ستون‌ها را دستی اضافه کنید.';
+    } elseif (stripos($dbError, 'Duplicate') !== false) {
+        $userError = 'قبلا برای امروز ثبت شده است.';
+    }
+
+    echo json_encode([
+        'ok' => false,
+        'error' => $userError,
+        'debug' => $dbError,
+    ], JSON_UNESCAPED_UNICODE);
     exit;
 }
 ?>

@@ -426,13 +426,31 @@ $recentLogs = $stmt->fetchAll();
             .then(response => response.json())
             .then(data => {
                 if (data.ok) {
-                    setMessage('با موفقیت ثبت شد.', 'success');
-                    setTimeout(() => location.reload(), 800);
+                    let msg = data.message || 'با موفقیت ثبت شد.';
+                    if (data.type === 'out' && data.duration_minutes != null) {
+                        const h = Math.floor(data.duration_minutes / 60);
+                        const m = data.duration_minutes % 60;
+                        msg += ` مدت حضور: ${h} ساعت و ${m} دقیقه.`;
+                    }
+                    if (data.warning) {
+                        console.warn('attendance warning:', data.warning, data.debug || null);
+                        msg += ' هشدار: ' + data.warning;
+                        setMessage(msg, 'error');
+                    } else {
+                        setMessage(msg, 'success');
+                    }
+                    setTimeout(() => location.reload(), data.warning ? 3500 : 800);
                 } else {
-                    setMessage(data.error || 'خطا در ثبت.', 'error');
+                    console.error('attendance error:', data);
+                    let err = data.error || 'خطا در ثبت.';
+                    if (data.debug) {
+                        err += ' [' + data.debug + ']';
+                    }
+                    setMessage(err, 'error');
                 }
             })
-            .catch(() => {
+            .catch((err) => {
+                console.error(err);
                 setMessage('خطا در ارتباط با سرور.', 'error');
             });
         }
