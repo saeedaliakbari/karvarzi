@@ -7,14 +7,66 @@ if (empty($_SESSION['is_teacher'])) {
 }
 
 $db = getDB();
-$stmt = $db->query('
+
+$search = trim($_GET['q'] ?? '');
+$typeFilter = $_GET['type'] ?? '';
+$dateFrom = $_GET['date_from'] ?? '';
+$dateTo = $_GET['date_to'] ?? '';
+$sort = $_GET['sort'] ?? 'created_desc';
+
+$orderMap = [
+    'created_desc' => 'l.created_at DESC',
+    'created_asc' => 'l.created_at ASC',
+    'date_desc' => 'l.log_date DESC, l.created_at DESC',
+    'date_asc' => 'l.log_date ASC, l.created_at ASC',
+    'name_asc' => 's.name ASC, l.created_at DESC',
+    'name_desc' => 's.name DESC, l.created_at DESC',
+    'type_asc' => 'l.type ASC, l.created_at DESC',
+    'type_desc' => 'l.type DESC, l.created_at DESC',
+];
+$orderBy = $orderMap[$sort] ?? $orderMap['created_desc'];
+
+$where = [];
+$params = [];
+
+if ($search !== '') {
+    $where[] = '(s.name LIKE :search OR s.mobile LIKE :search)';
+    $params[':search'] = '%' . $search . '%';
+}
+
+if (in_array($typeFilter, ['in', 'out'], true)) {
+    $where[] = 'l.type = :type';
+    $params[':type'] = $typeFilter;
+}
+
+if ($dateFrom !== '') {
+    $where[] = 'l.log_date >= :date_from';
+    $params[':date_from'] = $dateFrom;
+}
+
+if ($dateTo !== '') {
+    $where[] = 'l.log_date <= :date_to';
+    $params[':date_to'] = $dateTo;
+}
+
+$sql = '
     SELECT l.id, s.name, s.mobile, l.type, l.log_date, l.latitude, l.longitude,
            l.selfie_path, l.distance_from_checkin_meters, l.created_at
     FROM attendance_logs l
     JOIN students s ON s.id = l.student_id
-    ORDER BY l.created_at DESC
-    LIMIT 200
-');
+';
+
+if (!empty($where)) {
+    $sql .= ' WHERE ' . implode(' AND ', $where);
+}
+
+$sql .= ' ORDER BY ' . $orderBy . ' LIMIT 200';
+
+$stmt = $db->prepare($sql);
+foreach ($params as $key => $value) {
+    $stmt->bindValue($key, $value);
+}
+$stmt->execute();
 $logs = $stmt->fetchAll();
 ?>
 <!DOCTYPE html>
@@ -155,6 +207,23 @@ $logs = $stmt->fetchAll();
             color: #6c757d;
             font-size: 0.85rem;
         }
+        .filter-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+        }
+        .filter-card .form-control,
+        .filter-card .form-select {
+            background: var(--card-bg);
+            color: var(--text);
+            border-color: var(--border);
+        }
+        .filter-card .form-control::placeholder {
+            color: var(--muted);
+        }
+        .filter-actions .btn {
+            border-radius: 12px;
+        }
 
         :root {
             --body-bg: #f0f2f5;
@@ -235,6 +304,48 @@ $logs = $stmt->fetchAll();
             
             <!-- Body -->
             <div class="card-body p-4 p-md-5">
+                <div class="filter-card p-3 p-md-4 mb-4">
+                    <form method="GET" class="row g-3 align-items-end">
+                        <div class="col-12 col-md-4 col-lg-3">
+                            <label class="form-label fw-bold">جستجو</label>
+                            <input type="text" name="q" class="form-control" value="<?= htmlspecialchars($search) ?>" placeholder="نام یا موبایل">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label fw-bold">نوع</label>
+                            <select name="type" class="form-select">
+                                <option value="" <?= $typeFilter === '' ? 'selected' : '' ?>>همه</option>
+                                <option value="in" <?= $typeFilter === 'in' ? 'selected' : '' ?>>ورود</option>
+                                <option value="out" <?= $typeFilter === 'out' ? 'selected' : '' ?>>خروج</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label fw-bold">از تاریخ</label>
+                            <input type="date" name="date_from" class="form-control" value="<?= htmlspecialchars($dateFrom) ?>">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label fw-bold">تا تاریخ</label>
+                            <input type="date" name="date_to" class="form-control" value="<?= htmlspecialchars($dateTo) ?>">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label fw-bold">مرتب‌سازی</label>
+                            <select name="sort" class="form-select">
+                                <option value="created_desc" <?= $sort === 'created_desc' ? 'selected' : '' ?>>جدیدترین</option>
+                                <option value="created_asc" <?= $sort === 'created_asc' ? 'selected' : '' ?>>قدیمی‌ترین</option>
+                                <option value="date_desc" <?= $sort === 'date_desc' ? 'selected' : '' ?>>تاریخ نزولی</option>
+                                <option value="date_asc" <?= $sort === 'date_asc' ? 'selected' : '' ?>>تاریخ صعودی</option>
+                                <option value="name_asc" <?= $sort === 'name_asc' ? 'selected' : '' ?>>نام الفبایی</option>
+                                <option value="name_desc" <?= $sort === 'name_desc' ? 'selected' : '' ?>>نام معکوس</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-12 col-lg-1 d-grid filter-actions">
+                            <button type="submit" class="btn btn-primary">اعمال</button>
+                        </div>
+                        <div class="col-12 col-md-12 col-lg-1 d-grid filter-actions">
+                            <a href="teacher.php" class="btn btn-outline-secondary">پاک</a>
+                        </div>
+                    </form>
+                </div>
+
                 <!-- Statistics -->
                 <?php 
                     $totalIn = 0;
@@ -307,8 +418,8 @@ $logs = $stmt->fetchAll();
                                             <span class="badge-out"><i class="fas fa-sign-out-alt me-1"></i> خروج</span>
                                         <?php endif; ?>
                                     </td>
-                                    <td><?= $log['log_date'] ?></td>
-                                    <td><?= date('H:i:s', strtotime($log['created_at'])) ?></td>
+                                    <td><?= htmlspecialchars(jalaliDate($log['log_date'])) ?></td>
+                                    <td><?= htmlspecialchars(jalaliDate($log['created_at'], 'Y/m/d H:i:s')) ?></td>
                                     <td>
                                         <a class="map-link" target="_blank" href="https://www.google.com/maps?q=<?= $log['latitude'] ?>,<?= $log['longitude'] ?>">
                                             <i class="fas fa-map-marker-alt me-1"></i>
@@ -334,7 +445,7 @@ $logs = $stmt->fetchAll();
                 <!-- Footer -->
                 <div class="mt-4 text-center text-muted small">
                     <i class="far fa-clock me-1"></i>
-                    آخرین به‌روزرسانی: <?= date('Y/m/d H:i:s') ?>
+                    آخرین به‌روزرسانی: <?= htmlspecialchars(jalaliDate(date('Y-m-d H:i:s'), 'Y/m/d H:i:s')) ?>
                 </div>
             </div>
         </div>
