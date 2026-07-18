@@ -105,6 +105,7 @@ $distance = null;
 $durationMinutes = null;
 if ($type === 'out') {
     try {
+        $durationMinutes = 0;
         $stmt = $db->prepare('SELECT latitude, longitude, created_at FROM attendance_logs WHERE student_id = ? AND type = ? AND log_date = ?');
         $stmt->execute([$studentId, 'in', $today]);
         $inRow = $stmt->fetch();
