@@ -28,7 +28,7 @@ if ($view === 'students') {
         $params[':search'] = '%' . $search . '%';
     }
 
-    $sql = 'SELECT id, name, mobile, national_id, guardian_name, internship_address, guardian_mobile, created_at
+    $sql = 'SELECT id, name, mobile, national_id, guardian_name, internship_address, internship_lat, internship_lng, guardian_mobile, created_at
             FROM students';
     if (!empty($where)) {
         $sql .= ' WHERE ' . implode(' AND ', $where);
@@ -50,7 +50,7 @@ if ($view === 'students') {
             }
         }
         if (!$selectedStudent) {
-            $stmt = $db->prepare('SELECT id, name, mobile, national_id, guardian_name, internship_address, guardian_mobile, created_at FROM students WHERE id = ?');
+            $stmt = $db->prepare('SELECT id, name, mobile, national_id, guardian_name, internship_address, internship_lat, internship_lng, guardian_mobile, created_at FROM students WHERE id = ?');
             $stmt->execute([$selectedStudentId]);
             $selectedStudent = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
         }
@@ -562,6 +562,23 @@ if ($view === 'students') {
                                     <div class="col-12">
                                         <div class="detail-label">آدرس محل کارورزی</div>
                                         <div class="detail-value"><?= displayOrDash($selectedStudent['internship_address'] ?? '') ?></div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="detail-label">موقعیت محل کارورزی</div>
+                                        <div class="detail-value">
+                                            <?php if (!empty($selectedStudent['internship_lat']) && !empty($selectedStudent['internship_lng'])): ?>
+                                                <a class="map-link" target="_blank"
+                                                   href="https://www.google.com/maps?q=<?= urlencode($selectedStudent['internship_lat'] . ',' . $selectedStudent['internship_lng']) ?>">
+                                                    <i class="fas fa-map-marker-alt me-1"></i>
+                                                    مشاهده روی نقشه
+                                                </a>
+                                                <div class="text-muted small mt-1" dir="ltr">
+                                                    <?= htmlspecialchars($selectedStudent['internship_lat']) ?>, <?= htmlspecialchars($selectedStudent['internship_lng']) ?>
+                                                </div>
+                                            <?php else: ?>
+                                                <span class="text-muted">-</span>
+                                            <?php endif; ?>
+                                        </div>
                                     </div>
                                     <div class="col-12">
                                         <div class="detail-label">تاریخ ثبت‌نام</div>

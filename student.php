@@ -12,7 +12,7 @@ $view = ($_GET['view'] ?? '') === 'profile' ? 'profile' : 'attendance';
 $profileMessage = '';
 $profileError = '';
 
-$stmt = $db->prepare('SELECT id, name, mobile, national_id, guardian_name, internship_address, guardian_mobile FROM students WHERE id = ?');
+$stmt = $db->prepare('SELECT id, name, mobile, national_id, guardian_name, internship_address, internship_lat, internship_lng, guardian_mobile FROM students WHERE id = ?');
 $stmt->execute([$studentId]);
 $student = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -31,41 +31,61 @@ if ($view === 'profile' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $guardianName = trim($_POST['guardian_name'] ?? '');
     $internshipAddress = trim($_POST['internship_address'] ?? '');
     $guardianMobile = trim($_POST['guardian_mobile'] ?? '');
+    $internshipLat = trim($_POST['internship_lat'] ?? '');
+    $internshipLng = trim($_POST['internship_lng'] ?? '');
 
-    if ($name === '') {
-        $profileError = 'نام و نام خانوادگی الزامی است.';
-    } elseif ($mobile === '') {
-        $profileError = 'شماره موبایل الزامی است.';
-    } elseif ($nationalId !== '' && !preg_match('/^\d{10}$/', $nationalId)) {
-        $profileError = 'کدملی باید ۱۰ رقم باشد.';
-    } elseif ($guardianMobile !== '' && !preg_match('/^09\d{9}$/', $guardianMobile)) {
-        $profileError = 'شماره موبایل سرپرست معتبر نیست.';
-    } elseif (!preg_match('/^09\d{9}$/', $mobile)) {
-        $profileError = 'شماره موبایل معتبر نیست.';
-    } else {
-        $check = $db->prepare('SELECT id FROM students WHERE mobile = ? AND id != ?');
-        $check->execute([$mobile, $studentId]);
-        if ($check->fetch()) {
-            $profileError = 'این شماره موبایل قبلاً ثبت شده است.';
+    $latValue = null;
+    $lngValue = null;
+    if ($internshipLat !== '' || $internshipLng !== '') {
+        if (!is_numeric($internshipLat) || !is_numeric($internshipLng)) {
+            $profileError = 'مختصات موقعیت محل کارورزی نامعتبر است.';
         } else {
-            $update = $db->prepare(
-                'UPDATE students SET name = ?, mobile = ?, national_id = ?, guardian_name = ?, internship_address = ?, guardian_mobile = ? WHERE id = ?'
-            );
-            $update->execute([
-                $name,
-                $mobile,
-                $nationalId !== '' ? $nationalId : null,
-                $guardianName !== '' ? $guardianName : null,
-                $internshipAddress !== '' ? $internshipAddress : null,
-                $guardianMobile !== '' ? $guardianMobile : null,
-                $studentId,
-            ]);
+            $latValue = (float) $internshipLat;
+            $lngValue = (float) $internshipLng;
+            if ($latValue < -90 || $latValue > 90 || $lngValue < -180 || $lngValue > 180) {
+                $profileError = 'مختصات موقعیت محل کارورزی خارج از محدوده مجاز است.';
+            }
+        }
+    }
 
-            $_SESSION['student_name'] = $name;
-            $profileMessage = 'اطلاعات پروفایل با موفقیت ذخیره شد.';
+    if ($profileError === '') {
+        if ($name === '') {
+            $profileError = 'نام و نام خانوادگی الزامی است.';
+        } elseif ($mobile === '') {
+            $profileError = 'شماره موبایل الزامی است.';
+        } elseif ($nationalId !== '' && !preg_match('/^\d{10}$/', $nationalId)) {
+            $profileError = 'کدملی باید ۱۰ رقم باشد.';
+        } elseif ($guardianMobile !== '' && !preg_match('/^09\d{9}$/', $guardianMobile)) {
+            $profileError = 'شماره موبایل سرپرست معتبر نیست.';
+        } elseif (!preg_match('/^09\d{9}$/', $mobile)) {
+            $profileError = 'شماره موبایل معتبر نیست.';
+        } else {
+            $check = $db->prepare('SELECT id FROM students WHERE mobile = ? AND id != ?');
+            $check->execute([$mobile, $studentId]);
+            if ($check->fetch()) {
+                $profileError = 'این شماره موبایل قبلاً ثبت شده است.';
+            } else {
+                $update = $db->prepare(
+                    'UPDATE students SET name = ?, mobile = ?, national_id = ?, guardian_name = ?, internship_address = ?, internship_lat = ?, internship_lng = ?, guardian_mobile = ? WHERE id = ?'
+                );
+                $update->execute([
+                    $name,
+                    $mobile,
+                    $nationalId !== '' ? $nationalId : null,
+                    $guardianName !== '' ? $guardianName : null,
+                    $internshipAddress !== '' ? $internshipAddress : null,
+                    $latValue,
+                    $lngValue,
+                    $guardianMobile !== '' ? $guardianMobile : null,
+                    $studentId,
+                ]);
 
-            $stmt->execute([$studentId]);
-            $student = $stmt->fetch(PDO::FETCH_ASSOC);
+                $_SESSION['student_name'] = $name;
+                $profileMessage = 'اطلاعات پروفایل با موفقیت ذخیره شد.';
+
+                $stmt->execute([$studentId]);
+                $student = $stmt->fetch(PDO::FETCH_ASSOC);
+            }
         }
     }
 
@@ -76,6 +96,8 @@ if ($view === 'profile' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $student['guardian_name'] = $guardianName;
         $student['internship_address'] = $internshipAddress;
         $student['guardian_mobile'] = $guardianMobile;
+        $student['internship_lat'] = $internshipLat;
+        $student['internship_lng'] = $internshipLng;
     }
 }
 
@@ -112,6 +134,9 @@ function profileValue($value) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <?php if ($view === 'profile'): ?>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <?php endif; ?>
     <style>
         @font-face {
             font-family: 'Sahel';
@@ -269,6 +294,27 @@ function profileValue($value) {
             color: var(--accent);
             text-decoration: none;
             font-weight: 500;
+        }
+        #internshipMap {
+            height: 280px;
+            width: 100%;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            z-index: 1;
+        }
+        .map-coords {
+            font-size: 0.85rem;
+            color: var(--muted);
+            direction: ltr;
+            text-align: left;
+        }
+        .profile-map-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .profile-map-link:hover {
+            text-decoration: underline;
         }
         .logout-link {
             color: #6c757d;
@@ -520,6 +566,25 @@ function profileValue($value) {
                                         <div class="value"><?= profileValue($student['internship_address'] ?? '') ?></div>
                                     </div>
                                 </div>
+                                <div class="col-12">
+                                    <div class="profile-field">
+                                        <div class="label">موقعیت روی نقشه</div>
+                                        <div class="value">
+                                            <?php if (!empty($student['internship_lat']) && !empty($student['internship_lng'])): ?>
+                                                <a class="profile-map-link" target="_blank"
+                                                   href="https://www.google.com/maps?q=<?= urlencode($student['internship_lat'] . ',' . $student['internship_lng']) ?>">
+                                                    <i class="fas fa-map-marker-alt me-1"></i>
+                                                    مشاهده روی نقشه
+                                                </a>
+                                                <div class="map-coords mt-1">
+                                                    <?= htmlspecialchars($student['internship_lat']) ?>, <?= htmlspecialchars($student['internship_lng']) ?>
+                                                </div>
+                                            <?php else: ?>
+                                                <span class="text-muted">ثبت نشده</span>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <hr class="my-4">
@@ -558,6 +623,30 @@ function profileValue($value) {
                                     <div class="col-12">
                                         <label class="form-label" for="internship_address">آدرس محل کارورزی</label>
                                         <textarea class="form-control" id="internship_address" name="internship_address" rows="3"><?= htmlspecialchars($student['internship_address'] ?? '') ?></textarea>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label">موقعیت محل کارورزی روی نقشه</label>
+                                        <p class="text-muted small mb-2">روی نقشه کلیک کنید یا از موقعیت فعلی استفاده کنید.</p>
+                                        <div class="d-flex gap-2 mb-2 flex-wrap">
+                                            <button type="button" class="btn btn-sm btn-outline-primary" id="useMyLocationBtn">
+                                                <i class="fas fa-location-crosshairs me-1"></i>
+                                                موقعیت فعلی من
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" id="clearMapLocationBtn">
+                                                <i class="fas fa-trash me-1"></i>
+                                                پاک کردن موقعیت
+                                            </button>
+                                        </div>
+                                        <div id="internshipMap"></div>
+                                        <input type="hidden" name="internship_lat" id="internship_lat" value="<?= htmlspecialchars($student['internship_lat'] ?? '') ?>">
+                                        <input type="hidden" name="internship_lng" id="internship_lng" value="<?= htmlspecialchars($student['internship_lng'] ?? '') ?>">
+                                        <div class="map-coords mt-2" id="selectedCoordsText">
+                                            <?php if (!empty($student['internship_lat']) && !empty($student['internship_lng'])): ?>
+                                                <?= htmlspecialchars($student['internship_lat']) ?>, <?= htmlspecialchars($student['internship_lng']) ?>
+                                            <?php else: ?>
+                                                موقعیتی انتخاب نشده است
+                                            <?php endif; ?>
+                                        </div>
                                     </div>
                                     <div class="col-12">
                                         <button type="submit" class="btn btn-save-profile w-100">
@@ -990,6 +1079,100 @@ function profileValue($value) {
             modal.classList.remove('open');
             modal.setAttribute('aria-hidden', 'true');
         }
+    </script>
+    <?php endif; ?>
+    <?php if ($view === 'profile'): ?>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        (function() {
+            const latInput = document.getElementById('internship_lat');
+            const lngInput = document.getElementById('internship_lng');
+            const coordsText = document.getElementById('selectedCoordsText');
+            const mapEl = document.getElementById('internshipMap');
+            if (!latInput || !lngInput || !mapEl || typeof L === 'undefined') return;
+
+            const defaultLat = 35.6892;
+            const defaultLng = 51.3890;
+            const savedLat = parseFloat(latInput.value);
+            const savedLng = parseFloat(lngInput.value);
+            const hasSaved = Number.isFinite(savedLat) && Number.isFinite(savedLng);
+
+            const map = L.map('internshipMap').setView(
+                hasSaved ? [savedLat, savedLng] : [defaultLat, defaultLng],
+                hasSaved ? 16 : 12
+            );
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(map);
+
+            let marker = null;
+
+            function setLocation(lat, lng, zoom) {
+                latInput.value = Number(lat).toFixed(7);
+                lngInput.value = Number(lng).toFixed(7);
+                coordsText.textContent = latInput.value + ', ' + lngInput.value;
+
+                if (marker) {
+                    marker.setLatLng([lat, lng]);
+                } else {
+                    marker = L.marker([lat, lng]).addTo(map);
+                }
+                if (zoom) {
+                    map.setView([lat, lng], zoom);
+                }
+            }
+
+            function clearLocation() {
+                latInput.value = '';
+                lngInput.value = '';
+                coordsText.textContent = 'موقعیتی انتخاب نشده است';
+                if (marker) {
+                    map.removeLayer(marker);
+                    marker = null;
+                }
+            }
+
+            if (hasSaved) {
+                setLocation(savedLat, savedLng);
+            }
+
+            map.on('click', function(e) {
+                setLocation(e.latlng.lat, e.latlng.lng);
+            });
+
+            const useMyLocationBtn = document.getElementById('useMyLocationBtn');
+            if (useMyLocationBtn) {
+                useMyLocationBtn.addEventListener('click', function() {
+                    if (!navigator.geolocation) {
+                        alert('مرورگر شما از موقعیت مکانی پشتیبانی نمی‌کند.');
+                        return;
+                    }
+                    useMyLocationBtn.disabled = true;
+                    navigator.geolocation.getCurrentPosition(
+                        function(pos) {
+                            setLocation(pos.coords.latitude, pos.coords.longitude, 16);
+                            useMyLocationBtn.disabled = false;
+                        },
+                        function() {
+                            alert('دریافت موقعیت فعلی ممکن نشد.');
+                            useMyLocationBtn.disabled = false;
+                        },
+                        { enableHighAccuracy: true, timeout: 10000 }
+                    );
+                });
+            }
+
+            const clearBtn = document.getElementById('clearMapLocationBtn');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', clearLocation);
+            }
+
+            setTimeout(function() {
+                map.invalidateSize();
+            }, 200);
+        })();
     </script>
     <?php endif; ?>
     <script>

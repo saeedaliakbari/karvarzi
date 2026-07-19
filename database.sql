@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS students (
     national_id VARCHAR(10) NULL,
     guardian_name VARCHAR(100) NULL,
     internship_address TEXT NULL,
+    internship_lat DECIMAL(10, 7) NULL,
+    internship_lng DECIMAL(10, 7) NULL,
     guardian_mobile VARCHAR(15) NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -16,7 +18,9 @@ CREATE TABLE IF NOT EXISTS students (
 -- ALTER TABLE students ADD COLUMN national_id VARCHAR(10) NULL AFTER name;
 -- ALTER TABLE students ADD COLUMN guardian_name VARCHAR(100) NULL AFTER national_id;
 -- ALTER TABLE students ADD COLUMN internship_address TEXT NULL AFTER guardian_name;
--- ALTER TABLE students ADD COLUMN guardian_mobile VARCHAR(15) NULL AFTER internship_address;
+-- ALTER TABLE students ADD COLUMN internship_lat DECIMAL(10, 7) NULL AFTER internship_address;
+-- ALTER TABLE students ADD COLUMN internship_lng DECIMAL(10, 7) NULL AFTER internship_lat;
+-- ALTER TABLE students ADD COLUMN guardian_mobile VARCHAR(15) NULL AFTER internship_lng;
 
 CREATE TABLE IF NOT EXISTS attendance_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
