@@ -237,14 +237,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </button>
                         </form>
                         
-                        <hr class="my-4">
+                        <!-- <hr class="my-4">
                         
                         <div class="text-center">
                             <a href="teacher_login.php" class="teacher-link">
                                 <i class="fas fa-chalkboard-teacher me-1"></i>
                                 ورود معلم
                             </a>
-                        </div>
+                        </div> -->
                     </div>
                 </div>
             </div>

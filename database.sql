@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS attendance_logs (
     latitude DECIMAL(10, 7) NOT NULL,
     longitude DECIMAL(10, 7) NOT NULL,
     selfie_path VARCHAR(255) NOT NULL,
+    work_report TEXT NULL,
     distance_from_checkin_meters INT NULL,
     duration_from_checkin_minutes INT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -36,6 +37,7 @@ CREATE TABLE IF NOT EXISTS attendance_logs (
 -- ایندکس برای جستجوی سریع‌تر لاگ‌ها بر اساس دانش‌آموز و تاریخ
 CREATE INDEX idx_student_logs ON attendance_logs(student_id, log_date);
 
--- اگر جدول از قبل ساخته شده و این دو ستون را ندارد، این دو خط را اجرا کنید:
+-- اگر جدول از قبل ساخته شده و این ستون‌ها را ندارد، این خطوط را اجرا کنید:
 -- ALTER TABLE attendance_logs ADD COLUMN distance_from_checkin_meters INT NULL AFTER selfie_path;
 -- ALTER TABLE attendance_logs ADD COLUMN duration_from_checkin_minutes INT NULL AFTER distance_from_checkin_meters;
+-- ALTER TABLE attendance_logs ADD COLUMN work_report TEXT NULL AFTER selfie_path;

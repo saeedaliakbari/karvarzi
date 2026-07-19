@@ -298,6 +298,40 @@ function profileValue($value) {
             color: #fff;
             opacity: 0.95;
         }
+        .report-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.55);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            padding: 16px;
+        }
+        .report-modal-overlay.open {
+            display: flex;
+        }
+        .report-modal {
+            width: 100%;
+            max-width: 520px;
+            background: var(--card-bg);
+            color: var(--text);
+            border-radius: 16px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+            padding: 20px;
+        }
+        .report-modal textarea {
+            background: var(--panel-bg);
+            color: var(--text);
+            border-color: var(--border);
+            min-height: 140px;
+            resize: vertical;
+        }
+        .report-modal textarea:focus {
+            background: var(--card-bg);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.2);
+        }
 
         :root {
             --body-bg: #f0f2f5;
@@ -516,7 +550,7 @@ function profileValue($value) {
                             
                             <div class="col-12 col-md-6">
                                 <?php if ($hasIn && !$hasOut): ?>
-                                    <button class="btn btn-out w-100 text-white" onclick="triggerCapture('out')">
+                                    <button class="btn btn-out w-100 text-white" onclick="startCheckout()">
                                         <i class="fas fa-sign-out-alt me-2"></i>
                                         ثبت خروج
                                     </button>
@@ -542,6 +576,28 @@ function profileValue($value) {
                         
                         <!-- Hidden Camera Input -->
                         <input type="file" id="cameraInput" accept="image/*" capture="user" style="display:none;">
+
+                        <div class="report-modal-overlay" id="reportModal" aria-hidden="true">
+                            <div class="report-modal">
+                                <h5 class="fw-bold mb-2">
+                                    <i class="fas fa-file-alt me-2"></i>
+                                    گزارش کار امروز
+                                </h5>
+                                <p class="text-muted mb-3">قبل از ثبت خروج، خلاصه‌ای از کارهای انجام‌شده امروز را بنویسید.</p>
+                                <textarea id="workReportInput" class="form-control mb-2" maxlength="2000"
+                                          placeholder="مثال: امروز روی بخش ورود سیستم کار کردم و باگ فرم را برطرف کردم..."></textarea>
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <small class="text-muted">حداقل ۱۰ کاراکتر</small>
+                                    <small class="text-muted"><span id="reportCharCount">0</span>/2000</small>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-outline-secondary w-50" onclick="closeReportModal()">انصراف</button>
+                                    <button type="button" class="btn btn-out text-white w-50" onclick="confirmWorkReport()">
+                                        ادامه و گرفتن عکس
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                         
                         <!-- Recent Logs -->
                         <div class="mt-5">
@@ -605,8 +661,18 @@ function profileValue($value) {
     <?php if ($view === 'attendance'): ?>
     <script>
         let pendingType = null;
+        let pendingWorkReport = '';
         const cameraInput = document.getElementById('cameraInput');
         const msg = document.getElementById('msg');
+        const reportModal = document.getElementById('reportModal');
+        const workReportInput = document.getElementById('workReportInput');
+        const reportCharCount = document.getElementById('reportCharCount');
+
+        if (workReportInput && reportCharCount) {
+            workReportInput.addEventListener('input', () => {
+                reportCharCount.textContent = workReportInput.value.length;
+            });
+        }
 
         function setMessage(text, type = 'info') {
             const icons = {
@@ -625,8 +691,44 @@ function profileValue($value) {
                             <span class="${colors[type] || colors.info}">${text}</span>`;
         }
 
+        function startCheckout() {
+            pendingWorkReport = '';
+            if (workReportInput) {
+                workReportInput.value = '';
+                reportCharCount.textContent = '0';
+            }
+            openReportModal();
+        }
+
+        function openReportModal() {
+            if (!reportModal) return;
+            reportModal.classList.add('open');
+            reportModal.setAttribute('aria-hidden', 'false');
+            setTimeout(() => workReportInput && workReportInput.focus(), 50);
+        }
+
+        function closeReportModal() {
+            if (!reportModal) return;
+            reportModal.classList.remove('open');
+            reportModal.setAttribute('aria-hidden', 'true');
+        }
+
+        function confirmWorkReport() {
+            const report = (workReportInput?.value || '').trim();
+            if (report.length < 10) {
+                setMessage('گزارش کار باید حداقل ۱۰ کاراکتر باشد.', 'error');
+                return;
+            }
+            pendingWorkReport = report;
+            closeReportModal();
+            triggerCapture('out');
+        }
+
         function triggerCapture(type) {
             pendingType = type;
+            if (type === 'in') {
+                pendingWorkReport = '';
+            }
             cameraInput.value = '';
             cameraInput.click();
         }
@@ -667,12 +769,21 @@ function profileValue($value) {
                 return;
             }
 
+            if (pendingType === 'out' && pendingWorkReport.trim().length < 10) {
+                setMessage('گزارش کار امروز را وارد کنید.', 'error');
+                openReportModal();
+                return;
+            }
+
             setMessage('در حال ثبت...', 'info');
             const formData = new FormData();
             formData.append('type', pendingType);
             formData.append('lat', lat);
             formData.append('lng', lng);
             formData.append('selfie', cameraInput.files[0]);
+            if (pendingType === 'out') {
+                formData.append('work_report', pendingWorkReport);
+            }
 
             fetch('save_log.php', {
                 method: 'POST',

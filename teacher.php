@@ -98,7 +98,7 @@ if ($view === 'students') {
 
     $sql = '
         SELECT l.id, s.name, s.mobile, l.type, l.log_date, l.latitude, l.longitude,
-               l.selfie_path, l.distance_from_checkin_meters, l.duration_from_checkin_minutes, l.created_at
+               l.selfie_path, l.work_report, l.distance_from_checkin_meters, l.duration_from_checkin_minutes, l.created_at
         FROM attendance_logs l
         JOIN students s ON s.id = l.student_id
     ';
@@ -330,6 +330,13 @@ if ($view === 'students') {
         }
         .table-custom tbody tr.selected-student {
             background: rgba(245, 87, 108, 0.08);
+        }
+        .work-report-cell {
+            max-width: 260px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-size: 0.85rem;
+            line-height: 1.5;
         }
 
         :root {
@@ -638,6 +645,7 @@ if ($view === 'students') {
                                     <th>تاریخ</th>
                                     <th>ساعت</th>
                                     <th>مدت</th>
+                                    <th>گزارش کار</th>
                                     <th>موقعیت</th>
                                     <th>فاصله</th>
                                 </tr>
@@ -669,6 +677,13 @@ if ($view === 'students') {
                                             <span class="badge bg-light text-dark">
                                                 <?= $hours ?> ساعت و <?= $minutes ?> دقیقه
                                             </span>
+                                        <?php else: ?>
+                                            <span class="text-muted">-</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="work-report-cell">
+                                        <?php if (!empty($log['work_report'])): ?>
+                                            <?= nl2br(htmlspecialchars($log['work_report'])) ?>
                                         <?php else: ?>
                                             <span class="text-muted">-</span>
                                         <?php endif; ?>

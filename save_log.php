@@ -37,6 +37,24 @@ if (!isset($_FILES['selfie']) || $_FILES['selfie']['error'] !== UPLOAD_ERR_OK) {
     exit;
 }
 
+$workReport = trim($_POST['work_report'] ?? '');
+if ($type === 'out') {
+    if ($workReport === '') {
+        echo json_encode(['ok' => false, 'error' => 'گزارش کار امروز را وارد کنید.']);
+        exit;
+    }
+    if (mb_strlen($workReport) < 10) {
+        echo json_encode(['ok' => false, 'error' => 'گزارش کار باید حداقل ۱۰ کاراکتر باشد.']);
+        exit;
+    }
+    if (mb_strlen($workReport) > 2000) {
+        echo json_encode(['ok' => false, 'error' => 'گزارش کار نباید بیشتر از ۲۰۰۰ کاراکتر باشد.']);
+        exit;
+    }
+} else {
+    $workReport = null;
+}
+
 try {
     $db = getDB();
 } catch (PDOException $e) {
@@ -164,8 +182,8 @@ if ($type === 'out') {
 try {
     $stmt = $db->prepare('
         INSERT INTO attendance_logs
-        (student_id, type, log_date, latitude, longitude, selfie_path, distance_from_checkin_meters, duration_from_checkin_minutes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (student_id, type, log_date, latitude, longitude, selfie_path, work_report, distance_from_checkin_meters, duration_from_checkin_minutes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ');
     $stmt->execute([
         $studentId,
@@ -174,6 +192,7 @@ try {
         $lat,
         $lng,
         $relativePath,
+        $workReport,
         $distance,
         $durationMinutes
     ]);
@@ -202,7 +221,11 @@ try {
 
     $userError = 'خطا در ذخیره دیتابیس.';
     if (stripos($dbError, 'Unknown column') !== false) {
-        $userError = 'ستون duration/distance در جدول attendance_logs وجود ندارد. فایل database.sql را روی دیتابیس اعمال کنید یا ستون‌ها را دستی اضافه کنید.';
+        if (stripos($dbError, 'work_report') !== false) {
+            $userError = 'ستون work_report در جدول attendance_logs وجود ندارد. این دستور را اجرا کنید: ALTER TABLE attendance_logs ADD COLUMN work_report TEXT NULL AFTER selfie_path;';
+        } else {
+            $userError = 'ستون duration/distance در جدول attendance_logs وجود ندارد. فایل database.sql را روی دیتابیس اعمال کنید یا ستون‌ها را دستی اضافه کنید.';
+        }
     } elseif (stripos($dbError, 'Duplicate') !== false) {
         $userError = 'قبلا برای امروز ثبت شده است.';
     }
