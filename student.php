@@ -86,9 +86,16 @@ $todayTypes = $stmt->fetchAll(PDO::FETCH_COLUMN);
 $hasIn = in_array('in', $todayTypes);
 $hasOut = in_array('out', $todayTypes);
 
-$stmt = $db->prepare('SELECT type, created_at FROM attendance_logs WHERE student_id = ? ORDER BY created_at DESC LIMIT 10');
+$stmt = $db->prepare('
+    SELECT type, log_date, latitude, longitude, selfie_path, work_report,
+           distance_from_checkin_meters, duration_from_checkin_minutes, created_at
+    FROM attendance_logs
+    WHERE student_id = ?
+    ORDER BY created_at DESC
+    LIMIT 10
+');
 $stmt->execute([$studentId]);
-$recentLogs = $stmt->fetchAll();
+$recentLogs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 function profileValue($value) {
     $value = trim((string) $value);
@@ -199,14 +206,29 @@ function profileValue($value) {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 12px 0;
+            gap: 12px;
+            padding: 14px 10px;
             border-bottom: 1px solid #f0f0f0;
             transition: background 0.2s;
+            flex-wrap: wrap;
         }
         .log-item:hover {
             background: #f8f9fa;
-            padding-right: 10px;
             border-radius: 8px;
+        }
+        .log-item .log-main {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 0;
+            flex: 1;
+        }
+        .log-item .log-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 12px;
+            color: #6c757d;
+            font-size: 0.85rem;
         }
         .log-item .badge-in {
             background: #11998e;
@@ -222,9 +244,31 @@ function profileValue($value) {
             border-radius: 20px;
             font-size: 0.85rem;
         }
-        .log-item .log-time {
-            color: #6c757d;
+        .log-item .btn-more {
+            border-radius: 10px;
+            white-space: nowrap;
+        }
+        .detail-modal .detail-label {
+            color: var(--muted);
             font-size: 0.85rem;
+            margin-bottom: 4px;
+        }
+        .detail-modal .detail-value {
+            font-weight: 600;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+        .detail-modal .detail-selfie {
+            width: 96px;
+            height: 96px;
+            object-fit: cover;
+            border-radius: 14px;
+            border: 3px solid var(--border);
+        }
+        .detail-modal .map-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
         }
         .logout-link {
             color: #6c757d;
@@ -616,27 +660,121 @@ function profileValue($value) {
                                 </div>
                             <?php else: ?>
                                 <?php foreach ($recentLogs as $log): ?>
+                                    <?php
+                                        $typeText = $log['type'] === 'in' ? 'ورود' : 'خروج';
+                                        $durationText = '-';
+                                        if ($log['duration_from_checkin_minutes'] !== null) {
+                                            $totalMinutes = (int) $log['duration_from_checkin_minutes'];
+                                            $hours = intdiv($totalMinutes, 60);
+                                            $minutes = $totalMinutes % 60;
+                                            $durationText = $hours . ' ساعت و ' . $minutes . ' دقیقه';
+                                        }
+                                        $distanceText = $log['distance_from_checkin_meters'] !== null
+                                            ? number_format($log['distance_from_checkin_meters']) . ' متر'
+                                            : '-';
+                                        $dateText = jalaliDate($log['log_date']);
+                                        $timeText = jalaliDate($log['created_at'], 'H:i:s');
+                                    ?>
                                     <div class="log-item">
-                                        <span>
-                                            <?php if ($log['type'] === 'in'): ?>
-                                                <span class="badge-in">
-                                                    <i class="fas fa-sign-in-alt me-1"></i>
-                                                    ورود
+                                        <div class="log-main">
+                                            <div>
+                                                <?php if ($log['type'] === 'in'): ?>
+                                                    <span class="badge-in">
+                                                        <i class="fas fa-sign-in-alt me-1"></i>
+                                                        ورود
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span class="badge-out">
+                                                        <i class="fas fa-sign-out-alt me-1"></i>
+                                                        خروج
+                                                    </span>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="log-meta">
+                                                <span>
+                                                    <i class="far fa-calendar-alt me-1"></i>
+                                                    <?= htmlspecialchars($dateText) ?>
                                                 </span>
-                                            <?php else: ?>
-                                                <span class="badge-out">
-                                                    <i class="fas fa-sign-out-alt me-1"></i>
-                                                    خروج
+                                                <span>
+                                                    <i class="far fa-clock me-1"></i>
+                                                    <?= htmlspecialchars($timeText) ?>
                                                 </span>
-                                            <?php endif; ?>
-                                        </span>
-                                        <span class="log-time">
-                                            <i class="far fa-clock me-1"></i>
-                                            <?= date('H:i:s', strtotime($log['created_at'])) ?>
-                                        </span>
+                                                <span>
+                                                    <i class="fas fa-hourglass-half me-1"></i>
+                                                    <?= htmlspecialchars($durationText) ?>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm btn-outline-primary btn-more"
+                                            onclick="openLogDetail(this)"
+                                            data-type="<?= htmlspecialchars($typeText, ENT_QUOTES) ?>"
+                                            data-date="<?= htmlspecialchars($dateText, ENT_QUOTES) ?>"
+                                            data-time="<?= htmlspecialchars(jalaliDate($log['created_at'], 'Y/m/d H:i:s'), ENT_QUOTES) ?>"
+                                            data-duration="<?= htmlspecialchars($durationText, ENT_QUOTES) ?>"
+                                            data-distance="<?= htmlspecialchars($distanceText, ENT_QUOTES) ?>"
+                                            data-lat="<?= htmlspecialchars((string) $log['latitude'], ENT_QUOTES) ?>"
+                                            data-lng="<?= htmlspecialchars((string) $log['longitude'], ENT_QUOTES) ?>"
+                                            data-selfie="<?= htmlspecialchars($log['selfie_path'], ENT_QUOTES) ?>"
+                                            data-report="<?= htmlspecialchars($log['work_report'] ?? '', ENT_QUOTES) ?>"
+                                        >
+                                            <i class="fas fa-ellipsis-h me-1"></i>
+                                            بیشتر
+                                        </button>
                                     </div>
                                 <?php endforeach; ?>
                             <?php endif; ?>
+
+                            <div class="report-modal-overlay" id="logDetailModal" aria-hidden="true">
+                                <div class="report-modal detail-modal">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h5 class="fw-bold mb-0">
+                                            <i class="fas fa-info-circle me-2"></i>
+                                            جزئیات ثبت حضور
+                                        </h5>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="closeLogDetail()">بستن</button>
+                                    </div>
+                                    <div class="row g-3">
+                                        <div class="col-12 text-center">
+                                            <img id="studentDetailSelfie" class="detail-selfie" src="" alt="عکس">
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="detail-label">نوع</div>
+                                            <div class="detail-value" id="studentDetailType">-</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="detail-label">تاریخ</div>
+                                            <div class="detail-value" id="studentDetailDate">-</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="detail-label">ساعت</div>
+                                            <div class="detail-value" id="studentDetailTime">-</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="detail-label">مدت</div>
+                                            <div class="detail-value" id="studentDetailDuration">-</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="detail-label">فاصله</div>
+                                            <div class="detail-value" id="studentDetailDistance">-</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="detail-label">موقعیت</div>
+                                            <div class="detail-value">
+                                                <a id="studentDetailMap" class="map-link" target="_blank" href="#">
+                                                    <i class="fas fa-map-marker-alt me-1"></i>
+                                                    نقشه
+                                                </a>
+                                            </div>
+                                        </div>
+                                        <div class="col-12">
+                                            <div class="detail-label">گزارش کار</div>
+                                            <div class="detail-value" id="studentDetailReport">-</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <?php endif; ?>
                         
@@ -819,6 +957,38 @@ function profileValue($value) {
                 console.error(err);
                 setMessage('خطا در ارتباط با سرور.', 'error');
             });
+        }
+
+        function openLogDetail(button) {
+            const modal = document.getElementById('logDetailModal');
+            if (!modal || !button) return;
+
+            const report = (button.getAttribute('data-report') || '').trim();
+            document.getElementById('studentDetailType').textContent = button.getAttribute('data-type') || '-';
+            document.getElementById('studentDetailDate').textContent = button.getAttribute('data-date') || '-';
+            document.getElementById('studentDetailTime').textContent = button.getAttribute('data-time') || '-';
+            document.getElementById('studentDetailDuration').textContent = button.getAttribute('data-duration') || '-';
+            document.getElementById('studentDetailDistance').textContent = button.getAttribute('data-distance') || '-';
+            document.getElementById('studentDetailReport').textContent = report !== '' ? report : 'گزارش کاری ثبت نشده است.';
+
+            const selfie = button.getAttribute('data-selfie') || '';
+            const selfieImg = document.getElementById('studentDetailSelfie');
+            selfieImg.src = selfie;
+            selfieImg.style.display = selfie ? 'inline-block' : 'none';
+
+            const lat = button.getAttribute('data-lat') || '';
+            const lng = button.getAttribute('data-lng') || '';
+            document.getElementById('studentDetailMap').href = `https://www.google.com/maps?q=${lat},${lng}`;
+
+            modal.classList.add('open');
+            modal.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeLogDetail() {
+            const modal = document.getElementById('logDetailModal');
+            if (!modal) return;
+            modal.classList.remove('open');
+            modal.setAttribute('aria-hidden', 'true');
         }
     </script>
     <?php endif; ?>
