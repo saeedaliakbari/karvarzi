@@ -331,12 +331,36 @@ if ($view === 'students') {
         .table-custom tbody tr.selected-student {
             background: rgba(245, 87, 108, 0.08);
         }
-        .work-report-cell {
-            max-width: 260px;
-            white-space: pre-wrap;
-            word-break: break-word;
+        .btn-more {
+            border-radius: 10px;
+            white-space: nowrap;
+        }
+        .log-detail-modal .modal-content {
+            background: var(--card-bg);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+        }
+        .log-detail-modal .modal-header,
+        .log-detail-modal .modal-footer {
+            border-color: var(--border);
+        }
+        .log-detail-modal .detail-label {
+            color: var(--muted);
             font-size: 0.85rem;
-            line-height: 1.5;
+            margin-bottom: 4px;
+        }
+        .log-detail-modal .detail-value {
+            font-weight: 600;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+        .log-detail-modal .detail-selfie {
+            width: 96px;
+            height: 96px;
+            object-fit: cover;
+            border-radius: 14px;
+            border: 3px solid var(--border);
         }
 
         :root {
@@ -645,13 +669,26 @@ if ($view === 'students') {
                                     <th>تاریخ</th>
                                     <th>ساعت</th>
                                     <th>مدت</th>
-                                    <th>گزارش کار</th>
                                     <th>موقعیت</th>
                                     <th>فاصله</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php foreach ($logs as $log): ?>
+                                <?php
+                                    $durationText = '-';
+                                    if ($log['duration_from_checkin_minutes'] !== null) {
+                                        $totalMinutes = (int) $log['duration_from_checkin_minutes'];
+                                        $hours = intdiv($totalMinutes, 60);
+                                        $minutes = $totalMinutes % 60;
+                                        $durationText = $hours . ' ساعت و ' . $minutes . ' دقیقه';
+                                    }
+                                    $distanceText = $log['distance_from_checkin_meters'] !== null
+                                        ? number_format($log['distance_from_checkin_meters']) . ' متر'
+                                        : '-';
+                                    $typeText = $log['type'] === 'in' ? 'ورود' : 'خروج';
+                                ?>
                                 <tr>
                                     <td>
                                         <img class="selfie-img" src="<?= htmlspecialchars($log['selfie_path']) ?>" alt="عکس">
@@ -669,21 +706,7 @@ if ($view === 'students') {
                                     <td><?= htmlspecialchars(jalaliDate($log['created_at'], 'Y/m/d H:i:s')) ?></td>
                                     <td>
                                         <?php if ($log['duration_from_checkin_minutes'] !== null): ?>
-                                            <?php
-                                                $totalMinutes = (int) $log['duration_from_checkin_minutes'];
-                                                $hours = intdiv($totalMinutes, 60);
-                                                $minutes = $totalMinutes % 60;
-                                            ?>
-                                            <span class="badge bg-light text-dark">
-                                                <?= $hours ?> ساعت و <?= $minutes ?> دقیقه
-                                            </span>
-                                        <?php else: ?>
-                                            <span class="text-muted">-</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td class="work-report-cell">
-                                        <?php if (!empty($log['work_report'])): ?>
-                                            <?= nl2br(htmlspecialchars($log['work_report'])) ?>
+                                            <span class="badge bg-light text-dark"><?= htmlspecialchars($durationText) ?></span>
                                         <?php else: ?>
                                             <span class="text-muted">-</span>
                                         <?php endif; ?>
@@ -696,17 +719,106 @@ if ($view === 'students') {
                                     </td>
                                     <td>
                                         <?php if ($log['distance_from_checkin_meters'] !== null): ?>
-                                            <span class="badge bg-light text-dark">
-                                                <?= number_format($log['distance_from_checkin_meters']) ?> متر
-                                            </span>
+                                            <span class="badge bg-light text-dark"><?= htmlspecialchars($distanceText) ?></span>
                                         <?php else: ?>
                                             <span class="text-muted">-</span>
                                         <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm btn-outline-primary btn-more"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#logDetailModal"
+                                            data-name="<?= htmlspecialchars($log['name'], ENT_QUOTES) ?>"
+                                            data-mobile="<?= htmlspecialchars($log['mobile'], ENT_QUOTES) ?>"
+                                            data-type="<?= htmlspecialchars($typeText, ENT_QUOTES) ?>"
+                                            data-date="<?= htmlspecialchars(jalaliDate($log['log_date']), ENT_QUOTES) ?>"
+                                            data-time="<?= htmlspecialchars(jalaliDate($log['created_at'], 'Y/m/d H:i:s'), ENT_QUOTES) ?>"
+                                            data-duration="<?= htmlspecialchars($durationText, ENT_QUOTES) ?>"
+                                            data-distance="<?= htmlspecialchars($distanceText, ENT_QUOTES) ?>"
+                                            data-lat="<?= htmlspecialchars((string) $log['latitude'], ENT_QUOTES) ?>"
+                                            data-lng="<?= htmlspecialchars((string) $log['longitude'], ENT_QUOTES) ?>"
+                                            data-selfie="<?= htmlspecialchars($log['selfie_path'], ENT_QUOTES) ?>"
+                                            data-report="<?= htmlspecialchars($log['work_report'] ?? '', ENT_QUOTES) ?>"
+                                        >
+                                            <i class="fas fa-ellipsis-h me-1"></i>
+                                            بیشتر
+                                        </button>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
+
+                        <div class="modal fade log-detail-modal" id="logDetailModal" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered modal-lg">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">
+                                            <i class="fas fa-info-circle me-2"></i>
+                                            جزئیات ثبت حضور
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="بستن"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="row g-3">
+                                            <div class="col-12 col-md-3 text-center">
+                                                <img id="detailSelfie" class="detail-selfie" src="" alt="عکس">
+                                            </div>
+                                            <div class="col-12 col-md-9">
+                                                <div class="row g-3">
+                                                    <div class="col-12 col-md-6">
+                                                        <div class="detail-label">نام</div>
+                                                        <div class="detail-value" id="detailName">-</div>
+                                                    </div>
+                                                    <div class="col-12 col-md-6">
+                                                        <div class="detail-label">موبایل</div>
+                                                        <div class="detail-value" id="detailMobile" dir="ltr">-</div>
+                                                    </div>
+                                                    <div class="col-6 col-md-4">
+                                                        <div class="detail-label">نوع</div>
+                                                        <div class="detail-value" id="detailType">-</div>
+                                                    </div>
+                                                    <div class="col-6 col-md-4">
+                                                        <div class="detail-label">تاریخ</div>
+                                                        <div class="detail-value" id="detailDate">-</div>
+                                                    </div>
+                                                    <div class="col-12 col-md-4">
+                                                        <div class="detail-label">ساعت</div>
+                                                        <div class="detail-value" id="detailTime">-</div>
+                                                    </div>
+                                                    <div class="col-6 col-md-4">
+                                                        <div class="detail-label">مدت</div>
+                                                        <div class="detail-value" id="detailDuration">-</div>
+                                                    </div>
+                                                    <div class="col-6 col-md-4">
+                                                        <div class="detail-label">فاصله</div>
+                                                        <div class="detail-value" id="detailDistance">-</div>
+                                                    </div>
+                                                    <div class="col-12 col-md-4">
+                                                        <div class="detail-label">موقعیت</div>
+                                                        <div class="detail-value">
+                                                            <a id="detailMap" class="map-link" target="_blank" href="#">
+                                                                <i class="fas fa-map-marker-alt me-1"></i>
+                                                                مشاهده روی نقشه
+                                                            </a>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-12">
+                                                <div class="detail-label">گزارش کار</div>
+                                                <div class="detail-value" id="detailReport">-</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">بستن</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     <?php endif; ?>
                 </div>
                 <?php endif; ?>
@@ -734,6 +846,33 @@ if ($view === 'students') {
                 document.body.setAttribute('data-theme', nextTheme);
                 localStorage.setItem('karvarzi-theme', nextTheme);
                 themeToggle.innerHTML = nextTheme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+            });
+        }
+
+        const logDetailModal = document.getElementById('logDetailModal');
+        if (logDetailModal) {
+            logDetailModal.addEventListener('show.bs.modal', (event) => {
+                const button = event.relatedTarget;
+                if (!button) return;
+
+                const report = (button.getAttribute('data-report') || '').trim();
+                document.getElementById('detailName').textContent = button.getAttribute('data-name') || '-';
+                document.getElementById('detailMobile').textContent = button.getAttribute('data-mobile') || '-';
+                document.getElementById('detailType').textContent = button.getAttribute('data-type') || '-';
+                document.getElementById('detailDate').textContent = button.getAttribute('data-date') || '-';
+                document.getElementById('detailTime').textContent = button.getAttribute('data-time') || '-';
+                document.getElementById('detailDuration').textContent = button.getAttribute('data-duration') || '-';
+                document.getElementById('detailDistance').textContent = button.getAttribute('data-distance') || '-';
+                document.getElementById('detailReport').textContent = report !== '' ? report : 'گزارش کاری ثبت نشده است.';
+
+                const selfie = button.getAttribute('data-selfie') || '';
+                const selfieImg = document.getElementById('detailSelfie');
+                selfieImg.src = selfie;
+                selfieImg.style.display = selfie ? 'inline-block' : 'none';
+
+                const lat = button.getAttribute('data-lat') || '';
+                const lng = button.getAttribute('data-lng') || '';
+                document.getElementById('detailMap').href = `https://www.google.com/maps?q=${lat},${lng}`;
             });
         }
     </script>
