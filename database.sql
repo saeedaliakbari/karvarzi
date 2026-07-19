@@ -5,8 +5,18 @@ CREATE TABLE IF NOT EXISTS students (
     id INT AUTO_INCREMENT PRIMARY KEY,
     mobile VARCHAR(15) NOT NULL UNIQUE,
     name VARCHAR(100) NOT NULL,
+    national_id VARCHAR(10) NULL,
+    guardian_name VARCHAR(100) NULL,
+    internship_address TEXT NULL,
+    guardian_mobile VARCHAR(15) NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- اگر جدول از قبل ساخته شده و این ستون‌ها را ندارد، این خطوط را اجرا کنید:
+-- ALTER TABLE students ADD COLUMN national_id VARCHAR(10) NULL AFTER name;
+-- ALTER TABLE students ADD COLUMN guardian_name VARCHAR(100) NULL AFTER national_id;
+-- ALTER TABLE students ADD COLUMN internship_address TEXT NULL AFTER guardian_name;
+-- ALTER TABLE students ADD COLUMN guardian_mobile VARCHAR(15) NULL AFTER internship_address;
 
 CREATE TABLE IF NOT EXISTS attendance_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,

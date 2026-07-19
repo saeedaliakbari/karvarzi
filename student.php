@@ -8,6 +8,76 @@ if (empty($_SESSION['student_id'])) {
 
 $studentId = $_SESSION['student_id'];
 $db = getDB();
+$view = ($_GET['view'] ?? '') === 'profile' ? 'profile' : 'attendance';
+$profileMessage = '';
+$profileError = '';
+
+$stmt = $db->prepare('SELECT id, name, mobile, national_id, guardian_name, internship_address, guardian_mobile FROM students WHERE id = ?');
+$stmt->execute([$studentId]);
+$student = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$student) {
+    session_destroy();
+    header('Location: index.php');
+    exit;
+}
+
+$_SESSION['student_name'] = $student['name'];
+
+if ($view === 'profile' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $name = trim($_POST['name'] ?? '');
+    $mobile = trim($_POST['mobile'] ?? '');
+    $nationalId = trim($_POST['national_id'] ?? '');
+    $guardianName = trim($_POST['guardian_name'] ?? '');
+    $internshipAddress = trim($_POST['internship_address'] ?? '');
+    $guardianMobile = trim($_POST['guardian_mobile'] ?? '');
+
+    if ($name === '') {
+        $profileError = 'نام و نام خانوادگی الزامی است.';
+    } elseif ($mobile === '') {
+        $profileError = 'شماره موبایل الزامی است.';
+    } elseif ($nationalId !== '' && !preg_match('/^\d{10}$/', $nationalId)) {
+        $profileError = 'کدملی باید ۱۰ رقم باشد.';
+    } elseif ($guardianMobile !== '' && !preg_match('/^09\d{9}$/', $guardianMobile)) {
+        $profileError = 'شماره موبایل سرپرست معتبر نیست.';
+    } elseif (!preg_match('/^09\d{9}$/', $mobile)) {
+        $profileError = 'شماره موبایل معتبر نیست.';
+    } else {
+        $check = $db->prepare('SELECT id FROM students WHERE mobile = ? AND id != ?');
+        $check->execute([$mobile, $studentId]);
+        if ($check->fetch()) {
+            $profileError = 'این شماره موبایل قبلاً ثبت شده است.';
+        } else {
+            $update = $db->prepare(
+                'UPDATE students SET name = ?, mobile = ?, national_id = ?, guardian_name = ?, internship_address = ?, guardian_mobile = ? WHERE id = ?'
+            );
+            $update->execute([
+                $name,
+                $mobile,
+                $nationalId !== '' ? $nationalId : null,
+                $guardianName !== '' ? $guardianName : null,
+                $internshipAddress !== '' ? $internshipAddress : null,
+                $guardianMobile !== '' ? $guardianMobile : null,
+                $studentId,
+            ]);
+
+            $_SESSION['student_name'] = $name;
+            $profileMessage = 'اطلاعات پروفایل با موفقیت ذخیره شد.';
+
+            $stmt->execute([$studentId]);
+            $student = $stmt->fetch(PDO::FETCH_ASSOC);
+        }
+    }
+
+    if ($profileError !== '') {
+        $student['name'] = $name;
+        $student['mobile'] = $mobile;
+        $student['national_id'] = $nationalId;
+        $student['guardian_name'] = $guardianName;
+        $student['internship_address'] = $internshipAddress;
+        $student['guardian_mobile'] = $guardianMobile;
+    }
+}
 
 $today = date('Y-m-d');
 $stmt = $db->prepare('SELECT type FROM attendance_logs WHERE student_id = ? AND log_date = ?');
@@ -19,13 +89,18 @@ $hasOut = in_array('out', $todayTypes);
 $stmt = $db->prepare('SELECT type, created_at FROM attendance_logs WHERE student_id = ? ORDER BY created_at DESC LIMIT 10');
 $stmt->execute([$studentId]);
 $recentLogs = $stmt->fetchAll();
+
+function profileValue($value) {
+    $value = trim((string) $value);
+    return $value !== '' ? htmlspecialchars($value) : '<span class="text-muted">ثبت نشده</span>';
+}
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ثبت حضور</title>
+    <title><?= $view === 'profile' ? 'پروفایل دانش‌آموز' : 'ثبت حضور' ?></title>
     <!-- Bootstrap 5 RTL -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <!-- Font Awesome -->
@@ -164,6 +239,65 @@ $recentLogs = $stmt->fetchAll();
             padding: 8px 16px;
             border-radius: 20px;
         }
+        .page-nav {
+            display: flex;
+            gap: 8px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 12px;
+            padding: 4px;
+        }
+        .page-nav a {
+            color: rgba(255,255,255,0.85);
+            text-decoration: none;
+            padding: 6px 14px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            transition: background 0.2s, color 0.2s;
+        }
+        .page-nav a.active,
+        .page-nav a:hover {
+            background: rgba(255,255,255,0.22);
+            color: #fff;
+        }
+        .profile-field {
+            background: var(--panel-bg);
+            border-radius: 12px;
+            padding: 14px 16px;
+            height: 100%;
+        }
+        .profile-field .label {
+            color: var(--muted);
+            font-size: 0.85rem;
+            margin-bottom: 6px;
+        }
+        .profile-field .value {
+            font-weight: 600;
+            word-break: break-word;
+        }
+        .profile-form .form-control,
+        .profile-form .form-label {
+            color: var(--text);
+        }
+        .profile-form .form-control {
+            background: var(--panel-bg);
+            border-color: var(--border);
+        }
+        .profile-form .form-control:focus {
+            background: var(--card-bg);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.2);
+        }
+        .btn-save-profile {
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+            border: none;
+            color: #fff;
+            font-weight: 600;
+            padding: 12px 20px;
+        }
+        .btn-save-profile:hover {
+            color: #fff;
+            opacity: 0.95;
+        }
 
         :root {
             --body-bg: #f0f2f5;
@@ -224,19 +358,138 @@ $recentLogs = $stmt->fetchAll();
                 <div class="card card-dashboard">
                     <!-- Header -->
                     <div class="card-header">
-                        <div class="d-flex justify-content-between align-items-center gap-2">
+                        <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
                             <h3 class="mb-0">
                                 <i class="fas fa-user-circle"></i>
                                 سلام <?= htmlspecialchars($_SESSION['student_name']) ?>
                             </h3>
-                            <button type="button" id="themeToggle" class="btn btn-sm theme-toggle">
-                                <i class="fas fa-moon"></i>
-                            </button>
+                            <div class="d-flex align-items-center gap-2">
+                                <nav class="page-nav">
+                                    <a href="student.php" class="<?= $view === 'attendance' ? 'active' : '' ?>">
+                                        <i class="fas fa-clipboard-check me-1"></i>
+                                        حضور
+                                    </a>
+                                    <a href="student.php?view=profile" class="<?= $view === 'profile' ? 'active' : '' ?>">
+                                        <i class="fas fa-id-card me-1"></i>
+                                        پروفایل
+                                    </a>
+                                </nav>
+                                <button type="button" id="themeToggle" class="btn btn-sm theme-toggle">
+                                    <i class="fas fa-moon"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     
                     <!-- Body -->
                     <div class="card-body p-4 p-md-5">
+                        <?php if ($view === 'profile'): ?>
+                            <div class="mb-4">
+                                <h5 class="fw-bold mb-1">
+                                    <i class="fas fa-user-edit me-2"></i>
+                                    پروفایل دانش‌آموز
+                                </h5>
+                                <p class="text-muted mb-0">اطلاعات زیر را مشاهده و در صورت نیاز ویرایش کنید.</p>
+                            </div>
+
+                            <?php if ($profileMessage): ?>
+                                <div class="alert alert-success">
+                                    <i class="fas fa-check-circle me-2"></i>
+                                    <?= htmlspecialchars($profileMessage) ?>
+                                </div>
+                            <?php endif; ?>
+                            <?php if ($profileError): ?>
+                                <div class="alert alert-danger">
+                                    <i class="fas fa-exclamation-circle me-2"></i>
+                                    <?= htmlspecialchars($profileError) ?>
+                                </div>
+                            <?php endif; ?>
+
+                            <div class="row g-3 mb-4">
+                                <div class="col-12 col-md-6">
+                                    <div class="profile-field">
+                                        <div class="label">نام و نام خانوادگی</div>
+                                        <div class="value"><?= profileValue($student['name']) ?></div>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <div class="profile-field">
+                                        <div class="label">شماره موبایل</div>
+                                        <div class="value" dir="ltr"><?= profileValue($student['mobile']) ?></div>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <div class="profile-field">
+                                        <div class="label">کدملی</div>
+                                        <div class="value" dir="ltr"><?= profileValue($student['national_id'] ?? '') ?></div>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <div class="profile-field">
+                                        <div class="label">نام سرپرست</div>
+                                        <div class="value"><?= profileValue($student['guardian_name'] ?? '') ?></div>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <div class="profile-field">
+                                        <div class="label">شماره موبایل سرپرست</div>
+                                        <div class="value" dir="ltr"><?= profileValue($student['guardian_mobile'] ?? '') ?></div>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <div class="profile-field">
+                                        <div class="label">آدرس محل کارورزی</div>
+                                        <div class="value"><?= profileValue($student['internship_address'] ?? '') ?></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr class="my-4">
+
+                            <h6 class="fw-bold mb-3">
+                                <i class="fas fa-pen me-2"></i>
+                                ویرایش اطلاعات
+                            </h6>
+                            <form method="post" action="student.php?view=profile" class="profile-form">
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label" for="name">نام و نام خانوادگی</label>
+                                        <input type="text" class="form-control" id="name" name="name" required
+                                               value="<?= htmlspecialchars($student['name'] ?? '') ?>">
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label" for="mobile">شماره موبایل</label>
+                                        <input type="tel" class="form-control" id="mobile" name="mobile" required dir="ltr"
+                                               value="<?= htmlspecialchars($student['mobile'] ?? '') ?>" placeholder="09xxxxxxxxx">
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label" for="national_id">کدملی</label>
+                                        <input type="text" class="form-control" id="national_id" name="national_id" dir="ltr" maxlength="10"
+                                               value="<?= htmlspecialchars($student['national_id'] ?? '') ?>" placeholder="۱۰ رقم">
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label" for="guardian_name">نام سرپرست</label>
+                                        <input type="text" class="form-control" id="guardian_name" name="guardian_name"
+                                               value="<?= htmlspecialchars($student['guardian_name'] ?? '') ?>">
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label" for="guardian_mobile">شماره موبایل سرپرست</label>
+                                        <input type="tel" class="form-control" id="guardian_mobile" name="guardian_mobile" dir="ltr"
+                                               value="<?= htmlspecialchars($student['guardian_mobile'] ?? '') ?>" placeholder="09xxxxxxxxx">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label" for="internship_address">آدرس محل کارورزی</label>
+                                        <textarea class="form-control" id="internship_address" name="internship_address" rows="3"><?= htmlspecialchars($student['internship_address'] ?? '') ?></textarea>
+                                    </div>
+                                    <div class="col-12">
+                                        <button type="submit" class="btn btn-save-profile w-100">
+                                            <i class="fas fa-save me-2"></i>
+                                            ذخیره اطلاعات
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        <?php else: ?>
                         <!-- Status -->
                         <div class="mb-4 text-center">
                             <span class="status-badge bg-light">
@@ -329,6 +582,7 @@ $recentLogs = $stmt->fetchAll();
                                 <?php endforeach; ?>
                             <?php endif; ?>
                         </div>
+                        <?php endif; ?>
                         
                         <!-- Footer -->
                         <hr class="my-4">
@@ -348,6 +602,7 @@ $recentLogs = $stmt->fetchAll();
         </div>
     </div>
 
+    <?php if ($view === 'attendance'): ?>
     <script>
         let pendingType = null;
         const cameraInput = document.getElementById('cameraInput');
@@ -455,6 +710,7 @@ $recentLogs = $stmt->fetchAll();
             });
         }
     </script>
+    <?php endif; ?>
     <script>
         const themeToggle = document.getElementById('themeToggle');
         const savedTheme = localStorage.getItem('karvarzi-theme');

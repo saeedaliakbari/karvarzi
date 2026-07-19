@@ -7,74 +7,122 @@ if (empty($_SESSION['is_teacher'])) {
 }
 
 $db = getDB();
-
+$view = ($_GET['view'] ?? '') === 'students' ? 'students' : 'attendance';
 $search = trim($_GET['q'] ?? '');
-$typeFilter = $_GET['type'] ?? '';
-$dateFrom = $_GET['date_from'] ?? '';
-$dateTo = $_GET['date_to'] ?? '';
-$sort = $_GET['sort'] ?? 'created_desc';
+$logs = [];
+$students = [];
+$selectedStudent = null;
+$selectedStudentId = (int) ($_GET['id'] ?? 0);
 
-$orderMap = [
-    'created_desc' => 'l.created_at DESC',
-    'created_asc' => 'l.created_at ASC',
-    'date_desc' => 'l.log_date DESC, l.created_at DESC',
-    'date_asc' => 'l.log_date ASC, l.created_at ASC',
-    'name_asc' => 's.name ASC, l.created_at DESC',
-    'name_desc' => 's.name DESC, l.created_at DESC',
-    'type_asc' => 'l.type ASC, l.created_at DESC',
-    'type_desc' => 'l.type DESC, l.created_at DESC',
-];
-$orderBy = $orderMap[$sort] ?? $orderMap['created_desc'];
-
-$where = [];
-$params = [];
-
-if ($search !== '') {
-    $where[] = '(s.name LIKE :search OR s.mobile LIKE :search)';
-    $params[':search'] = '%' . $search . '%';
+function displayOrDash($value) {
+    $value = trim((string) $value);
+    return $value !== '' ? htmlspecialchars($value) : '<span class="text-muted">-</span>';
 }
 
-if (in_array($typeFilter, ['in', 'out'], true)) {
-    $where[] = 'l.type = :type';
-    $params[':type'] = $typeFilter;
+if ($view === 'students') {
+    $where = [];
+    $params = [];
+
+    if ($search !== '') {
+        $where[] = '(name LIKE :search OR mobile LIKE :search OR national_id LIKE :search OR guardian_name LIKE :search OR guardian_mobile LIKE :search)';
+        $params[':search'] = '%' . $search . '%';
+    }
+
+    $sql = 'SELECT id, name, mobile, national_id, guardian_name, internship_address, guardian_mobile, created_at
+            FROM students';
+    if (!empty($where)) {
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+    }
+    $sql .= ' ORDER BY name ASC';
+
+    $stmt = $db->prepare($sql);
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+    }
+    $stmt->execute();
+    $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if ($selectedStudentId > 0) {
+        foreach ($students as $row) {
+            if ((int) $row['id'] === $selectedStudentId) {
+                $selectedStudent = $row;
+                break;
+            }
+        }
+        if (!$selectedStudent) {
+            $stmt = $db->prepare('SELECT id, name, mobile, national_id, guardian_name, internship_address, guardian_mobile, created_at FROM students WHERE id = ?');
+            $stmt->execute([$selectedStudentId]);
+            $selectedStudent = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        }
+    }
+} else {
+    $typeFilter = $_GET['type'] ?? '';
+    $dateFrom = $_GET['date_from'] ?? '';
+    $dateTo = $_GET['date_to'] ?? '';
+    $sort = $_GET['sort'] ?? 'created_desc';
+
+    $orderMap = [
+        'created_desc' => 'l.created_at DESC',
+        'created_asc' => 'l.created_at ASC',
+        'date_desc' => 'l.log_date DESC, l.created_at DESC',
+        'date_asc' => 'l.log_date ASC, l.created_at ASC',
+        'name_asc' => 's.name ASC, l.created_at DESC',
+        'name_desc' => 's.name DESC, l.created_at DESC',
+        'type_asc' => 'l.type ASC, l.created_at DESC',
+        'type_desc' => 'l.type DESC, l.created_at DESC',
+    ];
+    $orderBy = $orderMap[$sort] ?? $orderMap['created_desc'];
+
+    $where = [];
+    $params = [];
+
+    if ($search !== '') {
+        $where[] = '(s.name LIKE :search OR s.mobile LIKE :search)';
+        $params[':search'] = '%' . $search . '%';
+    }
+
+    if (in_array($typeFilter, ['in', 'out'], true)) {
+        $where[] = 'l.type = :type';
+        $params[':type'] = $typeFilter;
+    }
+
+    if ($dateFrom !== '') {
+        $where[] = 'l.log_date >= :date_from';
+        $params[':date_from'] = $dateFrom;
+    }
+
+    if ($dateTo !== '') {
+        $where[] = 'l.log_date <= :date_to';
+        $params[':date_to'] = $dateTo;
+    }
+
+    $sql = '
+        SELECT l.id, s.name, s.mobile, l.type, l.log_date, l.latitude, l.longitude,
+               l.selfie_path, l.distance_from_checkin_meters, l.duration_from_checkin_minutes, l.created_at
+        FROM attendance_logs l
+        JOIN students s ON s.id = l.student_id
+    ';
+
+    if (!empty($where)) {
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+    }
+
+    $sql .= ' ORDER BY ' . $orderBy . ' LIMIT 200';
+
+    $stmt = $db->prepare($sql);
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+    }
+    $stmt->execute();
+    $logs = $stmt->fetchAll();
 }
-
-if ($dateFrom !== '') {
-    $where[] = 'l.log_date >= :date_from';
-    $params[':date_from'] = $dateFrom;
-}
-
-if ($dateTo !== '') {
-    $where[] = 'l.log_date <= :date_to';
-    $params[':date_to'] = $dateTo;
-}
-
-$sql = '
-    SELECT l.id, s.name, s.mobile, l.type, l.log_date, l.latitude, l.longitude,
-           l.selfie_path, l.distance_from_checkin_meters, l.duration_from_checkin_minutes, l.created_at
-    FROM attendance_logs l
-    JOIN students s ON s.id = l.student_id
-';
-
-if (!empty($where)) {
-    $sql .= ' WHERE ' . implode(' AND ', $where);
-}
-
-$sql .= ' ORDER BY ' . $orderBy . ' LIMIT 200';
-
-$stmt = $db->prepare($sql);
-foreach ($params as $key => $value) {
-    $stmt->bindValue($key, $value);
-}
-$stmt->execute();
-$logs = $stmt->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>پنل گزارش معلم</title>
+    <title><?= $view === 'students' ? 'اطلاعات دانش‌آموزان' : 'پنل گزارش معلم' ?></title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -241,6 +289,48 @@ $logs = $stmt->fetchAll();
         .filter-actions .btn {
             border-radius: 12px;
         }
+        .page-nav {
+            display: flex;
+            gap: 8px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 12px;
+            padding: 4px;
+        }
+        .page-nav a {
+            color: rgba(255,255,255,0.85);
+            text-decoration: none;
+            padding: 6px 14px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            transition: background 0.2s, color 0.2s;
+        }
+        .page-nav a.active,
+        .page-nav a:hover {
+            background: rgba(255,255,255,0.22);
+            color: #fff;
+        }
+        .student-detail-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+        }
+        .student-detail-card .detail-label {
+            color: var(--muted);
+            font-size: 0.85rem;
+            margin-bottom: 4px;
+        }
+        .student-detail-card .detail-value {
+            font-weight: 600;
+            word-break: break-word;
+        }
+        .btn-view-student {
+            border-radius: 10px;
+            white-space: nowrap;
+        }
+        .table-custom tbody tr.selected-student {
+            background: rgba(245, 87, 108, 0.08);
+        }
 
         :root {
             --body-bg: #f0f2f5;
@@ -303,12 +393,22 @@ $logs = $stmt->fetchAll();
     <div class="container-fluid">
         <div class="card card-dashboard">
             <!-- Header -->
-            <div class="card-header d-flex flex-wrap justify-content-between align-items-center">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <h2>
-                    <i class="fas fa-chart-line"></i>
-                    گزارش حضور و غیاب
+                    <i class="fas <?= $view === 'students' ? 'fa-users' : 'fa-chart-line' ?>"></i>
+                    <?= $view === 'students' ? 'اطلاعات دانش‌آموزان' : 'گزارش حضور و غیاب' ?>
                 </h2>
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <nav class="page-nav">
+                        <a href="teacher.php" class="<?= $view === 'attendance' ? 'active' : '' ?>">
+                            <i class="fas fa-clipboard-list me-1"></i>
+                            حضور
+                        </a>
+                        <a href="teacher.php?view=students" class="<?= $view === 'students' ? 'active' : '' ?>">
+                            <i class="fas fa-user-graduate me-1"></i>
+                            دانش‌آموزان
+                        </a>
+                    </nav>
                     <button type="button" id="themeToggle" class="btn btn-sm theme-toggle">
                         <i class="fas fa-moon"></i>
                     </button>
@@ -321,6 +421,127 @@ $logs = $stmt->fetchAll();
             
             <!-- Body -->
             <div class="card-body p-4 p-md-5">
+                <?php if ($view === 'students'): ?>
+                    <div class="filter-card p-3 p-md-4 mb-4">
+                        <form method="GET" class="row g-3 align-items-end">
+                            <input type="hidden" name="view" value="students">
+                            <?php if ($selectedStudentId > 0): ?>
+                                <input type="hidden" name="id" value="<?= $selectedStudentId ?>">
+                            <?php endif; ?>
+                            <div class="col-12 col-md-8 col-lg-9">
+                                <label class="form-label fw-bold">جستجوی دانش‌آموز</label>
+                                <input type="text" name="q" class="form-control" value="<?= htmlspecialchars($search) ?>"
+                                       placeholder="نام، موبایل، کدملی یا سرپرست">
+                            </div>
+                            <div class="col-6 col-md-2 col-lg-1 d-grid filter-actions">
+                                <button type="submit" class="btn btn-primary">جستجو</button>
+                            </div>
+                            <div class="col-6 col-md-2 col-lg-2 d-grid filter-actions">
+                                <a href="teacher.php?view=students" class="btn btn-outline-secondary">پاک</a>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-6 col-md-3">
+                            <div class="stat-box text-center">
+                                <div class="number text-primary"><?= count($students) ?></div>
+                                <div class="label">تعداد دانش‌آموزان</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-4">
+                        <div class="col-12 <?= $selectedStudent ? 'col-lg-7' : '' ?>">
+                            <div class="table-responsive-custom">
+                                <?php if (empty($students)): ?>
+                                    <div class="empty-state">
+                                        <i class="fas fa-user-slash"></i>
+                                        <h5 class="mt-3 text-muted">هیچ دانش‌آموزی یافت نشد</h5>
+                                    </div>
+                                <?php else: ?>
+                                    <table class="table table-custom">
+                                        <thead>
+                                            <tr>
+                                                <th>نام</th>
+                                                <th>موبایل</th>
+                                                <th>کدملی</th>
+                                                <th>سرپرست</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($students as $student): ?>
+                                            <tr class="<?= $selectedStudentId === (int) $student['id'] ? 'selected-student' : '' ?>">
+                                                <td><strong><?= htmlspecialchars($student['name']) ?></strong></td>
+                                                <td dir="ltr"><?= displayOrDash($student['mobile']) ?></td>
+                                                <td dir="ltr"><?= displayOrDash($student['national_id'] ?? '') ?></td>
+                                                <td><?= displayOrDash($student['guardian_name'] ?? '') ?></td>
+                                                <td>
+                                                    <a class="btn btn-sm btn-outline-primary btn-view-student"
+                                                       href="teacher.php?view=students&id=<?= (int) $student['id'] ?><?= $search !== '' ? '&q=' . urlencode($search) : '' ?>">
+                                                        <i class="fas fa-eye me-1"></i>
+                                                        مشاهده
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+
+                        <?php if ($selectedStudent): ?>
+                        <div class="col-12 col-lg-5">
+                            <div class="student-detail-card">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <div>
+                                        <h5 class="fw-bold mb-1">
+                                            <i class="fas fa-id-card me-2"></i>
+                                            جزئیات دانش‌آموز
+                                        </h5>
+                                        <small class="text-muted">کد: <?= (int) $selectedStudent['id'] ?></small>
+                                    </div>
+                                    <a href="teacher.php?view=students<?= $search !== '' ? '&q=' . urlencode($search) : '' ?>" class="btn btn-sm btn-outline-secondary">
+                                        بستن
+                                    </a>
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-12">
+                                        <div class="detail-label">نام و نام خانوادگی</div>
+                                        <div class="detail-value"><?= displayOrDash($selectedStudent['name']) ?></div>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <div class="detail-label">شماره موبایل</div>
+                                        <div class="detail-value" dir="ltr"><?= displayOrDash($selectedStudent['mobile']) ?></div>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <div class="detail-label">کدملی</div>
+                                        <div class="detail-value" dir="ltr"><?= displayOrDash($selectedStudent['national_id'] ?? '') ?></div>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <div class="detail-label">نام سرپرست</div>
+                                        <div class="detail-value"><?= displayOrDash($selectedStudent['guardian_name'] ?? '') ?></div>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <div class="detail-label">موبایل سرپرست</div>
+                                        <div class="detail-value" dir="ltr"><?= displayOrDash($selectedStudent['guardian_mobile'] ?? '') ?></div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="detail-label">آدرس محل کارورزی</div>
+                                        <div class="detail-value"><?= displayOrDash($selectedStudent['internship_address'] ?? '') ?></div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="detail-label">تاریخ ثبت‌نام</div>
+                                        <div class="detail-value"><?= htmlspecialchars(jalaliDate($selectedStudent['created_at'], 'Y/m/d H:i')) ?></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                <?php else: ?>
                 <div class="filter-card p-3 p-md-4 mb-4">
                     <form method="GET" class="row g-3 align-items-end">
                         <div class="col-12 col-md-4 col-lg-3">
@@ -330,28 +551,28 @@ $logs = $stmt->fetchAll();
                         <div class="col-6 col-md-2">
                             <label class="form-label fw-bold">نوع</label>
                             <select name="type" class="form-select">
-                                <option value="" <?= $typeFilter === '' ? 'selected' : '' ?>>همه</option>
-                                <option value="in" <?= $typeFilter === 'in' ? 'selected' : '' ?>>ورود</option>
-                                <option value="out" <?= $typeFilter === 'out' ? 'selected' : '' ?>>خروج</option>
+                                <option value="" <?= ($typeFilter ?? '') === '' ? 'selected' : '' ?>>همه</option>
+                                <option value="in" <?= ($typeFilter ?? '') === 'in' ? 'selected' : '' ?>>ورود</option>
+                                <option value="out" <?= ($typeFilter ?? '') === 'out' ? 'selected' : '' ?>>خروج</option>
                             </select>
                         </div>
                         <div class="col-6 col-md-2">
                             <label class="form-label fw-bold">از تاریخ</label>
-                            <input type="date" name="date_from" class="form-control" value="<?= htmlspecialchars($dateFrom) ?>">
+                            <input type="date" name="date_from" class="form-control" value="<?= htmlspecialchars($dateFrom ?? '') ?>">
                         </div>
                         <div class="col-6 col-md-2">
                             <label class="form-label fw-bold">تا تاریخ</label>
-                            <input type="date" name="date_to" class="form-control" value="<?= htmlspecialchars($dateTo) ?>">
+                            <input type="date" name="date_to" class="form-control" value="<?= htmlspecialchars($dateTo ?? '') ?>">
                         </div>
                         <div class="col-6 col-md-2">
                             <label class="form-label fw-bold">مرتب‌سازی</label>
                             <select name="sort" class="form-select">
-                                <option value="created_desc" <?= $sort === 'created_desc' ? 'selected' : '' ?>>جدیدترین</option>
-                                <option value="created_asc" <?= $sort === 'created_asc' ? 'selected' : '' ?>>قدیمی‌ترین</option>
-                                <option value="date_desc" <?= $sort === 'date_desc' ? 'selected' : '' ?>>تاریخ نزولی</option>
-                                <option value="date_asc" <?= $sort === 'date_asc' ? 'selected' : '' ?>>تاریخ صعودی</option>
-                                <option value="name_asc" <?= $sort === 'name_asc' ? 'selected' : '' ?>>نام الفبایی</option>
-                                <option value="name_desc" <?= $sort === 'name_desc' ? 'selected' : '' ?>>نام معکوس</option>
+                                <option value="created_desc" <?= ($sort ?? '') === 'created_desc' ? 'selected' : '' ?>>جدیدترین</option>
+                                <option value="created_asc" <?= ($sort ?? '') === 'created_asc' ? 'selected' : '' ?>>قدیمی‌ترین</option>
+                                <option value="date_desc" <?= ($sort ?? '') === 'date_desc' ? 'selected' : '' ?>>تاریخ نزولی</option>
+                                <option value="date_asc" <?= ($sort ?? '') === 'date_asc' ? 'selected' : '' ?>>تاریخ صعودی</option>
+                                <option value="name_asc" <?= ($sort ?? '') === 'name_asc' ? 'selected' : '' ?>>نام الفبایی</option>
+                                <option value="name_desc" <?= ($sort ?? '') === 'name_desc' ? 'selected' : '' ?>>نام معکوس</option>
                             </select>
                         </div>
                         <div class="col-12 col-md-12 col-lg-1 d-grid filter-actions">
@@ -473,6 +694,7 @@ $logs = $stmt->fetchAll();
                         </table>
                     <?php endif; ?>
                 </div>
+                <?php endif; ?>
                 
                 <!-- Footer -->
                 <div class="mt-4 text-center text-muted small">
