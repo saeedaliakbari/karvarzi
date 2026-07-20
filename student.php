@@ -681,6 +681,11 @@ function profileValue($value) {
                         <?php else: ?>
                         
                         <!-- Buttons -->
+                        <div id="preciseLocationHint" class="alert alert-info d-none mb-3">
+                            <i class="fas fa-location-arrow me-2"></i>
+                            برای دقت بهتر فاصله، هنگام ثبت حضور دسترسی <strong>موقعیت دقیق</strong> را تأیید کنید.
+                            اگر الان رد کنید مشکلی نیست؛ دفعه بعد دوباره درخواست می‌شود.
+                        </div>
                         <div class="row g-3 mb-4">
                             <div class="col-12 col-md-6">
                                 <?php if (!$hasIn): ?>
@@ -993,33 +998,152 @@ function profileValue($value) {
             cameraInput.click();
         }
 
-        if (cameraInput) {
-            cameraInput.addEventListener('change', function() {
-                if (!cameraInput.files.length) return;
+        const PRECISE_LOCATION_KEY = 'karvarzi-precise-location-granted';
 
-                if (!navigator.geolocation) {
-                    setMessage('مرورگر شما از موقعیت مکانی پشتیبانی نمی‌کند.', 'error');
-                    return;
+        function hasPreciseLocationGranted() {
+            return localStorage.getItem(PRECISE_LOCATION_KEY) === '1';
+        }
+
+        function markPreciseLocationGranted(granted) {
+            if (granted) {
+                localStorage.setItem(PRECISE_LOCATION_KEY, '1');
+            } else {
+                localStorage.removeItem(PRECISE_LOCATION_KEY);
+            }
+        }
+
+        function isPreciseEnough(position) {
+            const accuracy = position?.coords?.accuracy;
+            return Number.isFinite(accuracy) && accuracy > 0 && accuracy <= 100;
+        }
+
+        function getCurrentLocation(onSuccess, onError, onProgress) {
+            if (!navigator.geolocation) {
+                onError({ code: 0, message: 'مرورگر شما از موقعیت مکانی پشتیبانی نمی‌کند.' });
+                return;
+            }
+
+            // هر بار اول موقعیت دقیق خواسته می‌شود (اجبار نیست؛ در صورت رد، تقریبی مجاز است)
+            const attempts = [
+                { enableHighAccuracy: true, timeout: 25000, maximumAge: 0, mode: 'precise' },
+                { enableHighAccuracy: false, timeout: 25000, maximumAge: 60000, mode: 'approx' }
+            ];
+
+            let attemptIndex = 0;
+
+            function finishSuccess(position, mode) {
+                const precise = isPreciseEnough(position);
+                if (mode === 'precise' && precise) {
+                    markPreciseLocationGranted(true);
+                } else if (mode === 'precise' && !precise) {
+                    // فقط تقریبی داده شده؛ دفعه بعد دوباره دقیق خواسته می‌شود
+                    markPreciseLocationGranted(false);
+                } else {
+                    markPreciseLocationGranted(false);
                 }
 
-                setMessage('در حال دریافت موقعیت مکانی...', 'info');
+                if (typeof onProgress === 'function' && !hasPreciseLocationGranted()) {
+                    onProgress('موقعیت تقریبی دریافت شد. برای دقت بهتر، دفعه بعد دسترسی موقعیت دقیق را تأیید کنید.');
+                }
+                onSuccess(position, {
+                    mode,
+                    precise: hasPreciseLocationGranted()
+                });
+            }
+
+            function tryNext() {
+                const options = attempts[attemptIndex];
+                if (typeof onProgress === 'function') {
+                    onProgress(options.mode === 'precise'
+                        ? 'درخواست دسترسی به موقعیت دقیق...'
+                        : 'موقعیت دقیق در دسترس نبود؛ تلاش با موقعیت تقریبی...');
+                }
 
                 navigator.geolocation.getCurrentPosition(
                     function(position) {
+                        finishSuccess(position, options.mode);
+                    },
+                    function(error) {
+                        // رد کردن دسترسی دقیق اجبار نیست؛ یک‌بار با تقریبی ادامه می‌دهیم
+                        // و دفعه بعد دوباره دقیق خواسته می‌شود
+                        if (error.code === 1) {
+                            markPreciseLocationGranted(false);
+                        }
+
+                        const canRetry = attemptIndex < attempts.length - 1
+                            && (error.code === 1 || error.code === 2 || error.code === 3);
+                        if (canRetry) {
+                            attemptIndex += 1;
+                            tryNext();
+                            return;
+                        }
+
+                        const messages = {
+                            1: 'دسترسی موقعیت رد شد. برای ثبت دقیق‌تر، از تنظیمات مرورگر دسترسی Location را فعال کنید. دفعه بعد دوباره درخواست می‌شود.',
+                            2: 'اطلاعات موقعیت در دسترس نیست. GPS/Location را روشن کنید و دوباره تلاش کنید.',
+                            3: 'دریافت موقعیت طول کشید. Location را روشن کنید و دوباره تلاش کنید.'
+                        };
+                        onError({
+                            code: error.code,
+                            message: messages[error.code] || 'خطا در دریافت موقعیت مکانی.'
+                        });
+                    },
+                    {
+                        enableHighAccuracy: options.enableHighAccuracy,
+                        timeout: options.timeout,
+                        maximumAge: options.maximumAge
+                    }
+                );
+            }
+
+            // اگر قبلاً Block کرده باشد، راهنما نشان بده ولی باز هم درخواست بفرست
+            if (navigator.permissions && navigator.permissions.query) {
+                navigator.permissions.query({ name: 'geolocation' }).then(function(status) {
+                    if (status.state === 'denied') {
+                        markPreciseLocationGranted(false);
+                        if (typeof onProgress === 'function') {
+                            onProgress('دسترسی موقعیت قبلاً مسدود شده. از تنظیمات سایت مرورگر آن را فعال کنید...');
+                        }
+                    } else if (status.state !== 'granted' || !hasPreciseLocationGranted()) {
+                        if (typeof onProgress === 'function') {
+                            onProgress('لطفاً دسترسی موقعیت دقیق را تأیید کنید...');
+                        }
+                    }
+                    tryNext();
+                }).catch(function() {
+                    tryNext();
+                });
+            } else {
+                tryNext();
+            }
+        }
+
+        if (cameraInput) {
+            const preciseHint = document.getElementById('preciseLocationHint');
+            if (preciseHint && !hasPreciseLocationGranted()) {
+                preciseHint.classList.remove('d-none');
+            }
+
+            cameraInput.addEventListener('change', function() {
+                if (!cameraInput.files.length) return;
+
+                getCurrentLocation(
+                    function(position) {
+                        const preciseHintEl = document.getElementById('preciseLocationHint');
+                        if (preciseHintEl) {
+                            if (hasPreciseLocationGranted()) {
+                                preciseHintEl.classList.add('d-none');
+                            } else {
+                                preciseHintEl.classList.remove('d-none');
+                            }
+                        }
                         upload(position.coords.latitude, position.coords.longitude);
                     },
                     function(error) {
-                        const messages = {
-                            1: 'دسترسی به موقعیت مکانی رد شد.',
-                            2: 'اطلاعات موقعیت در دسترس نیست.',
-                            3: 'زمان دریافت موقعیت به پایان رسید.'
-                        };
-                        setMessage(messages[error.code] || 'خطا در دریافت موقعیت مکانی.', 'error');
+                        setMessage(error.message, 'error');
                     },
-                    {
-                        enableHighAccuracy: true,
-                        timeout: 10000,
-                        maximumAge: 0
+                    function(progressText) {
+                        setMessage(progressText, 'info');
                     }
                 );
             });
@@ -1191,22 +1315,48 @@ function profileValue($value) {
             const useMyLocationBtn = document.getElementById('useMyLocationBtn');
             if (useMyLocationBtn) {
                 useMyLocationBtn.addEventListener('click', function() {
+                    useMyLocationBtn.disabled = true;
+                    useMyLocationBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> در حال دریافت...';
+
+                    function finishButton() {
+                        useMyLocationBtn.disabled = false;
+                        useMyLocationBtn.innerHTML = '<i class="fas fa-location-crosshairs me-1"></i> موقعیت فعلی من';
+                    }
+
                     if (!navigator.geolocation) {
                         alert('مرورگر شما از موقعیت مکانی پشتیبانی نمی‌کند.');
+                        finishButton();
                         return;
                     }
-                    useMyLocationBtn.disabled = true;
-                    navigator.geolocation.getCurrentPosition(
-                        function(pos) {
-                            setLocation(pos.coords.latitude, pos.coords.longitude, 16);
-                            useMyLocationBtn.disabled = false;
-                        },
-                        function() {
-                            alert('دریافت موقعیت فعلی ممکن نشد.');
-                            useMyLocationBtn.disabled = false;
-                        },
-                        { enableHighAccuracy: true, timeout: 10000 }
-                    );
+
+                    const attempts = [
+                        { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 },
+                        { enableHighAccuracy: false, timeout: 25000, maximumAge: 60000 }
+                    ];
+                    let attemptIndex = 0;
+
+                    function tryNext() {
+                        navigator.geolocation.getCurrentPosition(
+                            function(pos) {
+                                setLocation(pos.coords.latitude, pos.coords.longitude, 16);
+                                finishButton();
+                            },
+                            function(error) {
+                                const canRetry = attemptIndex < attempts.length - 1
+                                    && (error.code === 2 || error.code === 3);
+                                if (canRetry) {
+                                    attemptIndex += 1;
+                                    tryNext();
+                                    return;
+                                }
+                                alert('دریافت موقعیت ممکن نشد. Location را روشن کنید و دوباره تلاش کنید.');
+                                finishButton();
+                            },
+                            attempts[attemptIndex]
+                        );
+                    }
+
+                    tryNext();
                 });
             }
 
