@@ -98,7 +98,8 @@ if ($view === 'students') {
 
     $sql = '
         SELECT l.id, s.name, s.mobile, l.type, l.log_date, l.latitude, l.longitude,
-               l.selfie_path, l.work_report, l.distance_from_checkin_meters, l.duration_from_checkin_minutes, l.created_at
+               l.selfie_path, l.work_report, l.distance_from_internship_meters,
+               l.distance_from_checkin_meters, l.duration_from_checkin_minutes, l.created_at
         FROM attendance_logs l
         JOIN students s ON s.id = l.student_id
     ';
@@ -687,7 +688,7 @@ if ($view === 'students') {
                                     <th>ساعت</th>
                                     <th>مدت</th>
                                     <th>موقعیت</th>
-                                    <th>فاصله</th>
+                                    <th>فاصله محل کارورزی</th>
                                     <th></th>
                                 </tr>
                             </thead>
@@ -703,6 +704,9 @@ if ($view === 'students') {
                                     }
                                     $distanceText = $log['distance_from_checkin_meters'] !== null
                                         ? number_format($log['distance_from_checkin_meters']) . ' متر'
+                                        : '-';
+                                    $internshipDistanceText = $log['distance_from_internship_meters'] !== null
+                                        ? number_format($log['distance_from_internship_meters']) . ' متر'
                                         : '-';
                                     $typeText = $log['type'] === 'in' ? 'ورود' : 'خروج';
                                 ?>
@@ -735,8 +739,8 @@ if ($view === 'students') {
                                         </a>
                                     </td>
                                     <td>
-                                        <?php if ($log['distance_from_checkin_meters'] !== null): ?>
-                                            <span class="badge bg-light text-dark"><?= htmlspecialchars($distanceText) ?></span>
+                                        <?php if ($log['distance_from_internship_meters'] !== null): ?>
+                                            <span class="badge bg-light text-dark"><?= htmlspecialchars($internshipDistanceText) ?></span>
                                         <?php else: ?>
                                             <span class="text-muted">-</span>
                                         <?php endif; ?>
@@ -754,6 +758,7 @@ if ($view === 'students') {
                                             data-time="<?= htmlspecialchars(jalaliDate($log['created_at'], 'Y/m/d H:i:s'), ENT_QUOTES) ?>"
                                             data-duration="<?= htmlspecialchars($durationText, ENT_QUOTES) ?>"
                                             data-distance="<?= htmlspecialchars($distanceText, ENT_QUOTES) ?>"
+                                            data-internship-distance="<?= htmlspecialchars($internshipDistanceText, ENT_QUOTES) ?>"
                                             data-lat="<?= htmlspecialchars((string) $log['latitude'], ENT_QUOTES) ?>"
                                             data-lng="<?= htmlspecialchars((string) $log['longitude'], ENT_QUOTES) ?>"
                                             data-selfie="<?= htmlspecialchars($log['selfie_path'], ENT_QUOTES) ?>"
@@ -810,7 +815,11 @@ if ($view === 'students') {
                                                         <div class="detail-value" id="detailDuration">-</div>
                                                     </div>
                                                     <div class="col-6 col-md-4">
-                                                        <div class="detail-label">فاصله</div>
+                                                        <div class="detail-label">فاصله از محل کارورزی</div>
+                                                        <div class="detail-value" id="detailInternshipDistance">-</div>
+                                                    </div>
+                                                    <div class="col-6 col-md-4">
+                                                        <div class="detail-label">فاصله از ورود</div>
                                                         <div class="detail-value" id="detailDistance">-</div>
                                                     </div>
                                                     <div class="col-12 col-md-4">
@@ -880,6 +889,10 @@ if ($view === 'students') {
                 document.getElementById('detailTime').textContent = button.getAttribute('data-time') || '-';
                 document.getElementById('detailDuration').textContent = button.getAttribute('data-duration') || '-';
                 document.getElementById('detailDistance').textContent = button.getAttribute('data-distance') || '-';
+                const internshipDistanceEl = document.getElementById('detailInternshipDistance');
+                if (internshipDistanceEl) {
+                    internshipDistanceEl.textContent = button.getAttribute('data-internship-distance') || '-';
+                }
                 document.getElementById('detailReport').textContent = report !== '' ? report : 'گزارش کاری ثبت نشده است.';
 
                 const selfie = button.getAttribute('data-selfie') || '';

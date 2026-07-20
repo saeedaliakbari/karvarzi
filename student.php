@@ -36,15 +36,15 @@ if ($view === 'profile' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $latValue = null;
     $lngValue = null;
-    if ($internshipLat !== '' || $internshipLng !== '') {
-        if (!is_numeric($internshipLat) || !is_numeric($internshipLng)) {
-            $profileError = 'مختصات موقعیت محل کارورزی نامعتبر است.';
-        } else {
-            $latValue = (float) $internshipLat;
-            $lngValue = (float) $internshipLng;
-            if ($latValue < -90 || $latValue > 90 || $lngValue < -180 || $lngValue > 180) {
-                $profileError = 'مختصات موقعیت محل کارورزی خارج از محدوده مجاز است.';
-            }
+    if ($internshipLat === '' || $internshipLng === '') {
+        $profileError = 'انتخاب موقعیت محل کارورزی روی نقشه الزامی است.';
+    } elseif (!is_numeric($internshipLat) || !is_numeric($internshipLng)) {
+        $profileError = 'مختصات موقعیت محل کارورزی نامعتبر است.';
+    } else {
+        $latValue = (float) $internshipLat;
+        $lngValue = (float) $internshipLng;
+        if ($latValue < -90 || $latValue > 90 || $lngValue < -180 || $lngValue > 180) {
+            $profileError = 'مختصات موقعیت محل کارورزی خارج از محدوده مجاز است.';
         }
     }
 
@@ -102,6 +102,8 @@ if ($view === 'profile' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $today = date('Y-m-d');
+$hasInternshipLocation = !empty($student['internship_lat']) && !empty($student['internship_lng']);
+
 $stmt = $db->prepare('SELECT type FROM attendance_logs WHERE student_id = ? AND log_date = ?');
 $stmt->execute([$studentId, $today]);
 $todayTypes = $stmt->fetchAll(PDO::FETCH_COLUMN);
@@ -110,7 +112,7 @@ $hasOut = in_array('out', $todayTypes);
 
 $stmt = $db->prepare('
     SELECT type, log_date, latitude, longitude, selfie_path, work_report,
-           distance_from_checkin_meters, duration_from_checkin_minutes, created_at
+           distance_from_internship_meters, distance_from_checkin_meters, duration_from_checkin_minutes, created_at
     FROM attendance_logs
     WHERE student_id = ?
     ORDER BY created_at DESC
@@ -625,8 +627,8 @@ function profileValue($value) {
                                         <textarea class="form-control" id="internship_address" name="internship_address" rows="3"><?= htmlspecialchars($student['internship_address'] ?? '') ?></textarea>
                                     </div>
                                     <div class="col-12">
-                                        <label class="form-label">موقعیت محل کارورزی روی نقشه</label>
-                                        <p class="text-muted small mb-2">روی نقشه کلیک کنید یا از موقعیت فعلی استفاده کنید.</p>
+                                        <label class="form-label">موقعیت محل کارورزی روی نقشه <span class="text-danger">*</span></label>
+                                        <p class="text-muted small mb-2">برای ثبت ورود و خروج، انتخاب موقعیت روی نقشه الزامی است.</p>
                                         <div class="d-flex gap-2 mb-2 flex-wrap">
                                             <button type="button" class="btn btn-sm btn-outline-primary" id="useMyLocationBtn">
                                                 <i class="fas fa-location-crosshairs me-1"></i>
@@ -664,6 +666,19 @@ function profileValue($value) {
                                 امروز: <?= jalaliDate($today) ?>
                             </span>
                         </div>
+
+                        <?php if (!$hasInternshipLocation): ?>
+                            <div class="alert alert-warning">
+                                <i class="fas fa-map-marker-alt me-2"></i>
+                                برای ثبت ورود و خروج باید ابتدا موقعیت محل کارورزی را در پروفایل مشخص کنید.
+                                <div class="mt-3">
+                                    <a href="student.php?view=profile" class="btn btn-warning w-100">
+                                        <i class="fas fa-user-edit me-2"></i>
+                                        رفتن به ویرایش پروفایل
+                                    </a>
+                                </div>
+                            </div>
+                        <?php else: ?>
                         
                         <!-- Buttons -->
                         <div class="row g-3 mb-4">
@@ -731,6 +746,7 @@ function profileValue($value) {
                                 </div>
                             </div>
                         </div>
+                        <?php endif; ?>
                         
                         <!-- Recent Logs -->
                         <div class="mt-5">
@@ -760,6 +776,9 @@ function profileValue($value) {
                                         }
                                         $distanceText = $log['distance_from_checkin_meters'] !== null
                                             ? number_format($log['distance_from_checkin_meters']) . ' متر'
+                                            : '-';
+                                        $internshipDistanceText = $log['distance_from_internship_meters'] !== null
+                                            ? number_format($log['distance_from_internship_meters']) . ' متر'
                                             : '-';
                                         $dateText = jalaliDate($log['log_date']);
                                         $timeText = jalaliDate($log['created_at'], 'H:i:s');
@@ -792,6 +811,10 @@ function profileValue($value) {
                                                     <i class="fas fa-hourglass-half me-1"></i>
                                                     <?= htmlspecialchars($durationText) ?>
                                                 </span>
+                                                <span>
+                                                    <i class="fas fa-map-marked-alt me-1"></i>
+                                                    تا محل کارورزی: <?= htmlspecialchars($internshipDistanceText) ?>
+                                                </span>
                                             </div>
                                         </div>
                                         <button
@@ -803,6 +826,7 @@ function profileValue($value) {
                                             data-time="<?= htmlspecialchars(jalaliDate($log['created_at'], 'Y/m/d H:i:s'), ENT_QUOTES) ?>"
                                             data-duration="<?= htmlspecialchars($durationText, ENT_QUOTES) ?>"
                                             data-distance="<?= htmlspecialchars($distanceText, ENT_QUOTES) ?>"
+                                            data-internship-distance="<?= htmlspecialchars($internshipDistanceText, ENT_QUOTES) ?>"
                                             data-lat="<?= htmlspecialchars((string) $log['latitude'], ENT_QUOTES) ?>"
                                             data-lng="<?= htmlspecialchars((string) $log['longitude'], ENT_QUOTES) ?>"
                                             data-selfie="<?= htmlspecialchars($log['selfie_path'], ENT_QUOTES) ?>"
@@ -845,7 +869,11 @@ function profileValue($value) {
                                             <div class="detail-value" id="studentDetailDuration">-</div>
                                         </div>
                                         <div class="col-6">
-                                            <div class="detail-label">فاصله</div>
+                                            <div class="detail-label">فاصله از محل کارورزی</div>
+                                            <div class="detail-value" id="studentDetailInternshipDistance">-</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="detail-label">فاصله از ورود</div>
                                             <div class="detail-value" id="studentDetailDistance">-</div>
                                         </div>
                                         <div class="col-6">
@@ -902,6 +930,7 @@ function profileValue($value) {
         }
 
         function setMessage(text, type = 'info') {
+            if (!msg) return;
             const icons = {
                 'info': 'fa-info-circle',
                 'success': 'fa-check-circle',
@@ -952,6 +981,10 @@ function profileValue($value) {
         }
 
         function triggerCapture(type) {
+            if (!cameraInput) {
+                location.href = 'student.php?view=profile';
+                return;
+            }
             pendingType = type;
             if (type === 'in') {
                 pendingWorkReport = '';
@@ -960,35 +993,37 @@ function profileValue($value) {
             cameraInput.click();
         }
 
-        cameraInput.addEventListener('change', function() {
-            if (!cameraInput.files.length) return;
+        if (cameraInput) {
+            cameraInput.addEventListener('change', function() {
+                if (!cameraInput.files.length) return;
 
-            if (!navigator.geolocation) {
-                setMessage('مرورگر شما از موقعیت مکانی پشتیبانی نمی‌کند.', 'error');
-                return;
-            }
-
-            setMessage('در حال دریافت موقعیت مکانی...', 'info');
-
-            navigator.geolocation.getCurrentPosition(
-                function(position) {
-                    upload(position.coords.latitude, position.coords.longitude);
-                },
-                function(error) {
-                    const messages = {
-                        1: 'دسترسی به موقعیت مکانی رد شد.',
-                        2: 'اطلاعات موقعیت در دسترس نیست.',
-                        3: 'زمان دریافت موقعیت به پایان رسید.'
-                    };
-                    setMessage(messages[error.code] || 'خطا در دریافت موقعیت مکانی.', 'error');
-                },
-                {
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 0
+                if (!navigator.geolocation) {
+                    setMessage('مرورگر شما از موقعیت مکانی پشتیبانی نمی‌کند.', 'error');
+                    return;
                 }
-            );
-        });
+
+                setMessage('در حال دریافت موقعیت مکانی...', 'info');
+
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        upload(position.coords.latitude, position.coords.longitude);
+                    },
+                    function(error) {
+                        const messages = {
+                            1: 'دسترسی به موقعیت مکانی رد شد.',
+                            2: 'اطلاعات موقعیت در دسترس نیست.',
+                            3: 'زمان دریافت موقعیت به پایان رسید.'
+                        };
+                        setMessage(messages[error.code] || 'خطا در دریافت موقعیت مکانی.', 'error');
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            });
+        }
 
         function upload(lat, lng) {
             if (lat === 0 || lng === 0) {
@@ -1035,6 +1070,13 @@ function profileValue($value) {
                     setTimeout(() => location.reload(), data.warning ? 3500 : 800);
                 } else {
                     console.error('attendance error:', data);
+                    if (data.need_profile_location) {
+                        setMessage(data.error || 'ابتدا موقعیت محل کارورزی را ثبت کنید.', 'error');
+                        setTimeout(() => {
+                            location.href = 'student.php?view=profile';
+                        }, 1200);
+                        return;
+                    }
                     let err = data.error || 'خطا در ثبت.';
                     if (data.debug) {
                         err += ' [' + data.debug + ']';
@@ -1058,6 +1100,10 @@ function profileValue($value) {
             document.getElementById('studentDetailTime').textContent = button.getAttribute('data-time') || '-';
             document.getElementById('studentDetailDuration').textContent = button.getAttribute('data-duration') || '-';
             document.getElementById('studentDetailDistance').textContent = button.getAttribute('data-distance') || '-';
+            const internshipDistanceEl = document.getElementById('studentDetailInternshipDistance');
+            if (internshipDistanceEl) {
+                internshipDistanceEl.textContent = button.getAttribute('data-internship-distance') || '-';
+            }
             document.getElementById('studentDetailReport').textContent = report !== '' ? report : 'گزارش کاری ثبت نشده است.';
 
             const selfie = button.getAttribute('data-selfie') || '';

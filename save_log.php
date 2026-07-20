@@ -62,6 +62,38 @@ try {
     exit;
 }
 
+$internshipLat = null;
+$internshipLng = null;
+$distanceFromInternship = null;
+
+try {
+    $stmt = $db->prepare('SELECT internship_lat, internship_lng FROM students WHERE id = ?');
+    $stmt->execute([$studentId]);
+    $studentLoc = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (
+        !$studentLoc
+        || $studentLoc['internship_lat'] === null
+        || $studentLoc['internship_lng'] === null
+        || $studentLoc['internship_lat'] === ''
+        || $studentLoc['internship_lng'] === ''
+    ) {
+        echo json_encode([
+            'ok' => false,
+            'error' => 'ابتدا موقعیت محل کارورزی را در پروفایل ثبت کنید.',
+            'need_profile_location' => true,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $internshipLat = (float) $studentLoc['internship_lat'];
+    $internshipLng = (float) $studentLoc['internship_lng'];
+    $distanceFromInternship = haversineMeters($internshipLat, $internshipLng, (float) $lat, (float) $lng);
+} catch (PDOException $e) {
+    echo json_encode(['ok' => false, 'error' => 'خطا در بررسی موقعیت محل کارورزی.']);
+    exit;
+}
+
 try {
     $stmt = $db->prepare('SELECT id FROM attendance_logs WHERE student_id = ? AND type = ? AND log_date = ?');
     $stmt->execute([$studentId, $type, $today]);
@@ -182,8 +214,8 @@ if ($type === 'out') {
 try {
     $stmt = $db->prepare('
         INSERT INTO attendance_logs
-        (student_id, type, log_date, latitude, longitude, selfie_path, work_report, distance_from_checkin_meters, duration_from_checkin_minutes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (student_id, type, log_date, latitude, longitude, selfie_path, work_report, distance_from_internship_meters, distance_from_checkin_meters, duration_from_checkin_minutes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ');
     $stmt->execute([
         $studentId,
@@ -193,6 +225,7 @@ try {
         $lng,
         $relativePath,
         $workReport,
+        $distanceFromInternship,
         $distance,
         $durationMinutes
     ]);
@@ -203,6 +236,7 @@ try {
         'type' => $type,
         'duration_minutes' => $durationMinutes,
         'distance_meters' => $distance,
+        'distance_from_internship_meters' => $distanceFromInternship,
     ];
 
     if ($calcWarning !== null) {
@@ -221,7 +255,9 @@ try {
 
     $userError = 'خطا در ذخیره دیتابیس.';
     if (stripos($dbError, 'Unknown column') !== false) {
-        if (stripos($dbError, 'work_report') !== false) {
+        if (stripos($dbError, 'distance_from_internship_meters') !== false) {
+            $userError = 'ستون distance_from_internship_meters در جدول attendance_logs وجود ندارد. این دستور را اجرا کنید: ALTER TABLE attendance_logs ADD COLUMN distance_from_internship_meters INT NULL AFTER work_report;';
+        } elseif (stripos($dbError, 'work_report') !== false) {
             $userError = 'ستون work_report در جدول attendance_logs وجود ندارد. این دستور را اجرا کنید: ALTER TABLE attendance_logs ADD COLUMN work_report TEXT NULL AFTER selfie_path;';
         } else {
             $userError = 'ستون duration/distance در جدول attendance_logs وجود ندارد. فایل database.sql را روی دیتابیس اعمال کنید یا ستون‌ها را دستی اضافه کنید.';
